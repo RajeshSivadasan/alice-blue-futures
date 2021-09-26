@@ -26,6 +26,6 @@ You can read through the comments in the ab.py/ab_options.py for detailed unders
 # There is an ab.ini/ab_options.ini file which is the key configuration file through which you can control all the parameters of this program, even at realtime using Telegram chats. 
 Will update proper documentation soon...
 
-Kindly suggest your feedback. It will help me improve.
+Although this is still work in progress, kindly suggest your feedback. It will help me improve.
 
 Feel free to use/diustrubte this code freely so that new algo developers can get started easily.  
