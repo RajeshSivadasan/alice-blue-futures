@@ -8,9 +8,11 @@ You need to have a valid AliceBlue client ID, password, 2FA authentication passw
 This program is focused on Nifty and Crude futures with a simple Supertrend with RSI strategy.
 Initially, I had developed this for windows then later moved to linux (ubuntu) platform on AWS. Now I am working on moving this to Oracle cloud as its free :) and this version works smoothly with the free tier as well ;-) 
 
-There are 2 programs, 
+There are 2 programs: 
 1. For Options trading - ab_options.py which uses ab_options.ini as configuration/parameter file.
 2. For Futures trading - ab.py which uses ab.ini as configuration/parameter file.
+
+These programs basically uses 3min (low) , 6min (medium) time frame supertrend and RSI indicators (adjusted through parameters) to generate signals. For any other strategy you need to modify the main program. My wish list includes parameterisation of this strategy peice as well. 
 
 There is a background program (ab_bg.py) which runs at the background and helps us to control our algo bot from anywhere using telegram. 
 We can send commands through telegram chats to do various activities in realtime like start/stop trading, set MTM levels, manage SL, get detailed logs etc. 
