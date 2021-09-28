@@ -1,4 +1,4 @@
-# Fully automated Alice Blue Algo Trading with Python on NSE and MCX for Nifty / Crude / Banknifty futures and options , alsolutely FREE !
+# Fully automated Alice Blue Algo Trading with Python on NSE and MCX for Nifty / Crude / Banknifty futures and options , absolutely FREE !
 This algo trading bot is my first attempt to try, learn and implement my python programming skills. Please use this only for reference and at your own risk.  
 This repository contains python code to perform algo trading on India, NSE through AliceBlue broker. 
 You need to have a valid AliceBlue client ID, password, 2FA authentication password set and API enabled (ask aliceblue support) to get this working.
