@@ -18,6 +18,8 @@
 #v7.1.5 check_orders() for order management. can implement trailing SL concept as well.
 #v7.1.6-7 buy_nifty_options() MIS SL order
 #v7.1.8-9 Fixed place_sl_order main_order_id bug, added debug comments
+#v7.2.0 Fixed place_sl_order bug - Trading Symbol Doesn't exist for the exchange
+#v7.2.1 check_orders() - TSL update and comments, logging
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -35,7 +37,7 @@
 # Supertrend Buy signal will trigger ATM CE buy
 # Supertrend Sell signal will trigger ATM PE buy 
 # Existing positions to be closed before order trigger
-# For option price, ATM ltp CE and ATM ltp PE to be suscribed dynamically and stored in global variables
+# For option price, ATM ltp CE and ATM ltp PE to be subscribed dynamically and stored in global variables
 # Nifty option order trigger to be based on Nifty50 Index movement hence nifty50 dataframe required 
 # BankNifty option order trigger to be based on BankNifty Index movement hence banknifty dataframe required to be maintained seperately
 
@@ -74,7 +76,7 @@
 # Guidelines:
 # TSL to be double of SL (Otherwise mostly SLs are hit as they tend to )
 # SL will be hit in high volatility. SL may be set to ATR*3 or medium df Supertrend Value
-# Always buy market, in case SL reverse and get out cost to cost. Market has to come up.  
+# Always buy market, in case SL reverse and get out cost to cost. Market has to come up, but mind expiry :)  
 # SLs are usually hit in volatile market, so see if you can use less qty and no SLs, especially bank.
 # Dont go against the trend in any case. 
 # Avoid manual trades
@@ -336,7 +338,7 @@ def savedata(flgUpdateConfigFile=True):
     except Exception as ex:
         iLog("In savedata(). Exception occured = " + str(ex),3)
 
-def place_sl_order(main_order_id, nifty_bank):
+def place_sl_order(main_order_id, nifty_bank, ins_opt):
     ''' nifty_bank = NIFTY | BANK '''
 
     print(f"In place_sl_order():main_order_id={main_order_id}, nifty_bank={nifty_bank}",flush=True)
@@ -352,8 +354,9 @@ def place_sl_order(main_order_id, nifty_bank):
             orders = alice.get_order_history()["data"]["completed_orders"]
             for ord in orders:
                 if ord["oms_order_id"]==main_order_id:
-                    print("In place_sl_order(): ord['order_status'], wait_time",ord["order_status"], wait_time, flush=True)
-                    if ord["order_status"]=="completed":
+                    print(f"In place_sl_order(): ord['order_status']={ord['order_status']},ord['price']={ord['price']}. Ord =\n",ord, flush=True)
+                    # Order may be rejected as well
+                    if ord["order_status"]=="complete": 
                         lt_price = ord["price"]
                         order_executed = True
                     break   #break for loop
@@ -367,34 +370,36 @@ def place_sl_order(main_order_id, nifty_bank):
         wait_time = wait_time - 1
 
     if order_executed:
+        time.sleep(10)  #As order might not be completely filled / alice blue takes time to recognise margin.
         #place SL order
         #---- Intraday order (MIS) , SL Order
         
         if nifty_bank == "NIFTY": 
-            ins_opt =  ins_bank_opt
-            bo1_qty = bank_bo1_qty
+            # ins_opt =  ins_bank_opt
+            bo1_qty = nifty_bo1_qty
             sl = bank_sl
             tgt1 = bank_tgt1
         elif nifty_bank == "BANK":
-            ins_opt =  ins_nifty_opt
-            bo1_qty = nifty_bo1_qty
+            # ins_opt =  ins_nifty_opt
+            bo1_qty = bank_bo1_qty
             sl = nifty_sl
             tgt1 = nifty_tgt1
         
 
-        order = squareOff_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit,float(lt_price-sl))
+        order = squareOff_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit, float(lt_price-sl))
         if order['status'] == 'success':
-            strMsg = "In place_sl_order(): MIS SL order_id=" + str(order['data']['oms_order_id'])
-            #update dict with SL order ID, [token, target price, instrument]
-            dict_sl_orders.update({order['data']['oms_order_id']:[ins_opt[1], lt_price+tgt1,ins_opt] } )
+            strMsg = f"In place_sl_order(): MIS SL order_id={order['data']['oms_order_id']}, Target Price={float(lt_price-sl)}"
+            #update dict with SL order ID : [token, target price, instrument]
+            dict_sl_orders.update({order['data']['oms_order_id']:[ins_opt[1], lt_price+tgt1, ins_opt] } )
             print("dict_sl_orders=",dict_sl_orders, flush=True)
         else:
-            strMsg = "In place_sl_order(): MIS SL Order Failed." + order['message']
+            strMsg = f"In place_sl_order(): MIS SL Order Failed.={order['message']}" 
         
     else:
         #cancel main order
-        alice.cancel_order(main_order_id)
-        strMsg = "place_sl_order(): main order not executed within the wait time of 120 seconds, hence cancelled the order " + main_order_id
+        ret = alice.cancel_order(main_order_id)
+        print("ret=alice.cancel_order()=>",ret, flush=True)
+        strMsg = "place_sl_order(): main order= not executed within the wait time of 120 seconds, hence cancelled the order " + main_order_id
 
     iLog(strMsg,sendTeleMsg=True)
 
@@ -547,7 +552,7 @@ def buy_nifty_options(strMsg):
             if order['status'] == 'success':
                 strMsg = strMsg + " buy_nifty(): Initiating place_sl_order(). main_order_id==" +  str(order['data']['oms_order_id'])
                 iLog(strMsg,sendTeleMsg=True)   # Can be commented later
-                t = threading.Thread(target=place_sl_order,args=(order['data']['oms_order_id'],"NIFTY",))
+                t = threading.Thread(target=place_sl_order,args=(order['data']['oms_order_id'],"NIFTY",ins_nifty_opt,))
                 t.start()
 
             else:
@@ -648,7 +653,7 @@ def buy_bank_options(strMsg):
             if order['status'] == 'success':
                 strMsg = strMsg + " buy_bank(): Initiating place_sl_order(). main_order_id=" + str(order['data']['oms_order_id']) 
                 iLog(strMsg,sendTeleMsg=True)   # Can be commented later
-                t = threading.Thread(target=place_sl_order,args=(order['data']['oms_order_id'],"BANK",))
+                t = threading.Thread(target=place_sl_order,args=(order['data']['oms_order_id'],"BANK",ins_bank_opt,))
                 t.start()
 
 
@@ -1039,12 +1044,13 @@ def get_option_tokens(nifty_bank="ALL"):
         print("ltp_bank_ATM_PE=",ltp_bank_ATM_PE,flush=True)  
 
 def check_orders():
-    ''' 1. Checks for pending SL orders and maintains local sl order dict 
+    ''' 1. Checks for pending SL orders and update/maintain local sl order dict 
         2. Updates SL order to target price if reached
+        2.1 Update SL order target price to TSL
     '''
-    # iLog("In check_orders()")   # can be disabled later to reduce logging  
+    iLog("In check_orders()")   # can be disabled later to reduce logging  
 
-    #1 Loop through order history and remove completed orders/keep only pending orders from the SL orders dict
+    #1 Remove completed orders/keep only pending orders from the SL orders dict
     try:
         orders = alice.get_order_history()['data']['pending_orders']
         if orders:
@@ -1067,19 +1073,31 @@ def check_orders():
     except:
         pass
     
-    
-    #2. Check the current price of the SL orders and if they are above tgt modify them to target price
-    # value = [0-token, 1-target price, 2-instrument]
-    for oms_order_id, value in dict_sl_orders.items():
-        #current ltp > target price
-        if dict_ltp[value[0]] > value[1] :
-            try:
-                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,price=value[1] )
-                iLog(f"In check_orders(): Limit price for OrderID {oms_order_id} modified to {value[1]}")
-                
-            except Exception as ex:
-                iLog("In check_orders(): Exception occured during order modification = " + str(ex),3)
+    print("dict_sl_orders=",dict_sl_orders,Flush=True)
+    print("dict_ltp=",dict_ltp,Flush=True)
 
+    #2. Check the current price of the SL orders and if they are above tgt modify them to target price
+    # dict_sl_orders => key=order ID : value = [0-token, 1-target price, 2-instrument]
+    for oms_order_id, value in dict_sl_orders.items():
+        #Set Target Price : current ltp > target price
+        if float(dict_ltp[value[0]]) > float(value[1]) :
+            try:
+                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,price=float(value[1]))
+                iLog(f"In check_orders(): Target price for OrderID {oms_order_id} modified to {value[1]}")
+            
+            except Exception as ex:
+                iLog("In check_orders(): Exception occured during Target price modification = " + str(ex),3)
+
+        #Set Target Price to Training SL
+        # Need nifty / banknift identificaiton        
+        elif float(dict_ltp[value[0]]) < float(value[1] - bank_tsl):
+            tsl_price = float(value[1] - bank_tsl)
+            try:
+                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,price=tsl_price )
+                iLog(f"In check_orders(): TSL for OrderID {oms_order_id} modified to {tsl_price}")
+            
+            except Exception as ex:
+                iLog("In check_orders(): Exception occured during TSL modification = " + str(ex),3)
 
 
 ########################################################################
