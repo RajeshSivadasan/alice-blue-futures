@@ -17,9 +17,12 @@
 #v7.1.4 Banknifty support updates, order management, threading
 #v7.1.5 check_orders() for order management. can implement trailing SL concept as well.
 #v7.1.6-7 buy_nifty_options() MIS SL order
-#v7.1.8-9 Fixed place_sl_order main_order_id bug, added debug comments
-#v7.2.0 Fixed place_sl_order bug - Trading Symbol Doesn't exist for the exchange
+#v7.1.8-9 Fixed place_sl_order() main_order_id bug, added debug comments
+#v7.2.0 Fixed place_sl_order() bug - Trading Symbol Doesn't exist for the exchange
 #v7.2.1 check_orders() - TSL update and comments, logging
+#v7.2.2 Workaround for modify_order() missing 1 required positional argument: 'quantity'. Need to update the code if the original package is fixed by the author 
+#v7.2.3 TSL logic updates in check_orders() and place_sl_order()
+
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -236,7 +239,7 @@ df_bank_med = pd.DataFrame(data=[],columns=df_cols)     # Medium - to store 6 mi
 df_nifty_med = pd.DataFrame(data=[],columns=df_cols)    # Medium - to store 6 mins level OHLC nifty
 
 dict_ltp = {}       #Will contain dictionary of token and ltp pulled from websocket
-dict_sl_orders = {} #Dictionary to store SL Order ID, token,symbol, target price; if ltp > target price then update the SL order limit price.
+dict_sl_orders = {} #Dictionary to store SL Order ID: token,target price, instrument, quantity; if ltp > target price then update the SL order limit price.
 
 # lst_nifty = []  
 cur_min = 0
@@ -388,9 +391,9 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
 
         order = squareOff_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit, float(lt_price-sl))
         if order['status'] == 'success':
-            strMsg = f"In place_sl_order(): MIS SL order_id={order['data']['oms_order_id']}, Target Price={float(lt_price-sl)}"
-            #update dict with SL order ID : [token, target price, instrument]
-            dict_sl_orders.update({order['data']['oms_order_id']:[ins_opt[1], lt_price+tgt1, ins_opt] } )
+            strMsg = f"In place_sl_order(): MIS SL order_id={order['data']['oms_order_id']}, StopLoss Price={float(lt_price-sl)}"
+            #update dict with SL order ID : [0-token, 1-target price, 2-instrument, 3-quantity, 4-SL Price]
+            dict_sl_orders.update({order['data']['oms_order_id']:[ins_opt[1], lt_price+tgt1, ins_opt, bo1_qty, float(lt_price-sl)] } )
             print("dict_sl_orders=",dict_sl_orders, flush=True)
         else:
             strMsg = f"In place_sl_order(): MIS SL Order Failed.={order['message']}" 
@@ -515,7 +518,7 @@ def buy_nifty_options(strMsg):
     strMsg = strMsg + " Limit Price=" + str(lt_price) + " SL=" + str(nifty_sl)
 
     # Can be parameterised
-    if lt_price<30 or lt_price>300 :
+    if lt_price<30 or lt_price>350 :
         strMsg = strMsg + " buy_nifty(): Limit Price not in buying range."
         iLog(strMsg,2,sendTeleMsg=True)
         return
@@ -533,7 +536,7 @@ def buy_nifty_options(strMsg):
 
     # Find CE or PE Position
     if pos_nifty > 0:   # Position updates in MTM check
-        strMsg = "buy_nifty(): Position already exists. " + strMsg    #do not buy if position already exists; 
+        strMsg = f"buy_nifty(): Position already exists={pos_nifty}. " + strMsg    #do not buy if position already exists; 
     else:
 
         if trade_limit_reached("NIFTY"):
@@ -616,7 +619,7 @@ def buy_bank_options(strMsg):
     strMsg = strMsg + " Limit Price=" + str(lt_price) + " SL=" + str(bank_sl)
 
     
-    if lt_price<50 or lt_price>350 :
+    if lt_price<50 or lt_price>400 :
         strMsg = strMsg + " buy_bank(): Limit Price not in buying range."
         iLog(strMsg,2,sendTeleMsg=True)
         return
@@ -634,7 +637,7 @@ def buy_bank_options(strMsg):
 
     # Find CE or PE Position
     if pos_bank > 0:   # Position updates in MTM check
-        strMsg = "buy_bank(): Position already exists. " + strMsg    #do not buy if position already exists; 
+        strMsg = f"buy_bank(): Position already exists={pos_bank}. " + strMsg    #do not buy if position already exists; 
     else:
 
         if trade_limit_reached("BANKN"):
@@ -1048,7 +1051,7 @@ def check_orders():
         2. Updates SL order to target price if reached
         2.1 Update SL order target price to TSL
     '''
-    iLog("In check_orders()")   # can be disabled later to reduce logging  
+    # iLog("In check_orders()")   # can be disabled later to reduce logging  
 
     #1 Remove completed orders/keep only pending orders from the SL orders dict
     try:
@@ -1073,28 +1076,32 @@ def check_orders():
     except:
         pass
     
-    print("dict_sl_orders=",dict_sl_orders,Flush=True)
-    print("dict_ltp=",dict_ltp,Flush=True)
+    # print("dict_sl_orders=",dict_sl_orders,flush=True)
+    # print("dict_ltp=",dict_ltp,flush=True)
 
     #2. Check the current price of the SL orders and if they are above tgt modify them to target price
-    # dict_sl_orders => key=order ID : value = [0-token, 1-target price, 2-instrument]
+    # dict_sl_orders => key=order ID : value = [0-token, 1-target price,2-instrument, 3-quantity, 4-SL Price]
     for oms_order_id, value in dict_sl_orders.items():
         #Set Target Price : current ltp > target price
-        if float(dict_ltp[value[0]]) > float(value[1]) :
+        ltp = float(dict_ltp[value[0]])
+        print(f"oms_order_id={oms_order_id}, float(dict_ltp[value[0]])={float(dict_ltp[value[0]])}, float(value[1]={float(value[1])}, bank_tsl={bank_tsl}", flush=True)
+        if ltp > float(value[1]) :
             try:
-                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,price=float(value[1]))
-                iLog(f"In check_orders(): Target price for OrderID {oms_order_id} modified to {value[1]}")
+                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,value[3], price=float(value[1]))
+                iLog(f"In check_orders(): BullsEye! Target price for OrderID {oms_order_id} modified to {value[1]}")
             
             except Exception as ex:
                 iLog("In check_orders(): Exception occured during Target price modification = " + str(ex),3)
 
-        #Set Target Price to Training SL
-        # Need nifty / banknift identificaiton        
-        elif float(dict_ltp[value[0]]) < float(value[1] - bank_tsl):
-            tsl_price = float(value[1] - bank_tsl)
+        #Set StopLoss(TargetPrice) to Training SL
+        # Need nifty / banknifty identificaiton        
+        elif float(value[4])  < (ltp - (bank_tsl)):
+            tsl_price = float(ltp - (bank_tsl))
             try:
-                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,price=tsl_price )
-                iLog(f"In check_orders(): TSL for OrderID {oms_order_id} modified to {tsl_price}")
+                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,value[3],price=tsl_price )
+                #Update dictionary with the new SL price
+                dict_sl_orders.update({oms_order_id:[value[0], value[1], value[2], value[3],tsl_price]} )
+                iLog(f"In check_orders(): TSL for OrderID {oms_order_id} modified to {tsl_price}.\n dict_sl_orders={dict_sl_orders}")
             
             except Exception as ex:
                 iLog("In check_orders(): Exception occured during TSL modification = " + str(ex),3)
@@ -1288,7 +1295,7 @@ while True:
             # Get realtime config changes from ab.ini file and reload variables
             get_realtime_config()
 
-            strMsg = strMsg + " POS="+ str(pos_nifty)  + " MTM=" + str(MTM)
+            strMsg = strMsg + f" POS(n,bn)=({pos_nifty}, {pos_bank}), MTM={MTM}" 
 
             iLog(strMsg,sendTeleMsg=True)
 
