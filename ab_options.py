@@ -22,7 +22,7 @@
 #v7.2.1 check_orders() - TSL update and comments, logging
 #v7.2.2 Workaround for modify_order() missing 1 required positional argument: 'quantity'. Need to update the code if the original package is fixed by the author 
 #v7.2.3 TSL logic updates in check_orders() and place_sl_order()
-
+#v7.2.4 Removed unwanted comments, updated 
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -357,12 +357,13 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
             orders = alice.get_order_history()["data"]["completed_orders"]
             for ord in orders:
                 if ord["oms_order_id"]==main_order_id:
-                    print(f"In place_sl_order(): ord['order_status']={ord['order_status']},ord['price']={ord['price']}. Ord =\n",ord, flush=True)
+                    print(f"In place_sl_order(): Order Details =",ord, flush=True)
                     # Order may be rejected as well
                     if ord["order_status"]=="complete": 
                         lt_price = ord["price"]
                         order_executed = True
-                    break   #break for loop
+                        break   #break for loop
+        
         except Exception as ex:
             print("In place_sl_order(): Exception = ",ex,flush=True)
         
@@ -394,7 +395,7 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
             strMsg = f"In place_sl_order(): MIS SL order_id={order['data']['oms_order_id']}, StopLoss Price={float(lt_price-sl)}"
             #update dict with SL order ID : [0-token, 1-target price, 2-instrument, 3-quantity, 4-SL Price]
             dict_sl_orders.update({order['data']['oms_order_id']:[ins_opt[1], lt_price+tgt1, ins_opt, bo1_qty, float(lt_price-sl)] } )
-            print("dict_sl_orders=",dict_sl_orders, flush=True)
+            print("place_sl_order(): dict_sl_orders=",dict_sl_orders, flush=True)
         else:
             strMsg = f"In place_sl_order(): MIS SL Order Failed.={order['message']}" 
         
@@ -437,8 +438,8 @@ def squareOff_MIS(buy_sell,ins_scrip,qty, order_type = OrderType.Market, limit_p
                          is_amo = False,
                          order_tag = order_tag)
 
-        strMsg = "In squareOff_MIS(): buy_sell={},ins_scrip={},qty={},order_type={},limit_price={}".format(buy_sell,ins_scrip,qty,order_type,limit_price)
-        iLog(strMsg,6,sendTeleMsg=True)
+        # strMsg = "In squareOff_MIS(): buy_sell={},ins_scrip={},qty={},order_type={},limit_price={}".format(buy_sell,ins_scrip,qty,order_type,limit_price)
+        # iLog(strMsg,6,sendTeleMsg=True)
     
     except Exception as ex:
         iLog("Exception occured in squareOff_MIS():"+str(ex),3)
@@ -537,6 +538,7 @@ def buy_nifty_options(strMsg):
     # Find CE or PE Position
     if pos_nifty > 0:   # Position updates in MTM check
         strMsg = f"buy_nifty(): Position already exists={pos_nifty}. " + strMsg    #do not buy if position already exists; 
+        iLog(strMsg,sendTeleMsg=True)
     else:
 
         if trade_limit_reached("NIFTY"):
@@ -560,7 +562,7 @@ def buy_nifty_options(strMsg):
 
             else:
                 strMsg = strMsg + ' buy_nifty(): MIS Order Failed.' + order['message']
-
+                iLog(strMsg,sendTeleMsg=True)
 
         elif nifty_ord_type == "BO" :
             #---- First Bracket order for initial target
@@ -593,7 +595,7 @@ def buy_nifty_options(strMsg):
                 else:
                     strMsg=strMsg + ' buy_nifty() 3rd BO Failed.' + order['message']
 
-    iLog(strMsg,sendTeleMsg=True)
+            iLog(strMsg,sendTeleMsg=True)
 
 def buy_bank_options(strMsg):
     '''Buy Banknifty options '''
@@ -638,6 +640,7 @@ def buy_bank_options(strMsg):
     # Find CE or PE Position
     if pos_bank > 0:   # Position updates in MTM check
         strMsg = f"buy_bank(): Position already exists={pos_bank}. " + strMsg    #do not buy if position already exists; 
+        iLog(strMsg,sendTeleMsg=True)
     else:
 
         if trade_limit_reached("BANKN"):
@@ -659,10 +662,9 @@ def buy_bank_options(strMsg):
                 t = threading.Thread(target=place_sl_order,args=(order['data']['oms_order_id'],"BANK",ins_bank_opt,))
                 t.start()
 
-
             else:
                 strMsg = strMsg + ' buy_bank(): MIS Order Failed.' + order['message']
-
+                iLog(strMsg,sendTeleMsg=True)
 
 
         elif bank_ord_type == "BO" :
@@ -696,7 +698,7 @@ def buy_bank_options(strMsg):
                 else:
                     strMsg=strMsg + ' buy_bank() 3rd BO Failed.' + order['message']
 
-    iLog(strMsg,sendTeleMsg=True)
+            iLog(strMsg,sendTeleMsg=True)
 
 def subscribe_ins():
     global alice,ins_nifty,ins_bank
@@ -1076,15 +1078,15 @@ def check_orders():
     except:
         pass
     
-    # print("dict_sl_orders=",dict_sl_orders,flush=True)
+    print("check_orders():dict_sl_orders=",dict_sl_orders,flush=True)
     # print("dict_ltp=",dict_ltp,flush=True)
 
     #2. Check the current price of the SL orders and if they are above tgt modify them to target price
     # dict_sl_orders => key=order ID : value = [0-token, 1-target price,2-instrument, 3-quantity, 4-SL Price]
     for oms_order_id, value in dict_sl_orders.items():
-        #Set Target Price : current ltp > target price
         ltp = float(dict_ltp[value[0]])
-        print(f"oms_order_id={oms_order_id}, float(dict_ltp[value[0]])={float(dict_ltp[value[0]])}, float(value[1]={float(value[1])}, bank_tsl={bank_tsl}", flush=True)
+        print(f"oms_order_id={oms_order_id}, ltp={ltp}, Target={float(value[1])}, bank_tsl={bank_tsl}, SL Price={float(value[4])}", flush=True)
+        #Set Target Price : current ltp > target price
         if ltp > float(value[1]) :
             try:
                 alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,value[3], price=float(value[1]))
