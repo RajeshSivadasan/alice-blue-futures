@@ -7,7 +7,7 @@ Initially, I had developed this for windows then later moved to linux (ubuntu) p
 
 There are 2 programs: 
 1. For Options trading (Requires 10-15k capital) - ab_options.py which uses ab_options.ini as configuration/parameter file.
-2. For Futures trading (Requires 2.5 to 4 lakhs capital) - ab.py which uses ab.ini as configuration/parameter file.
+2. For Futures trading (Requires 2.5-4 lakhs capital) - ab.py which uses ab.ini as configuration/parameter file.
 
 These programs basically uses 3min (low) , 6min (medium) time frame supertrend and RSI indicators (adjusted through parameters) to generate signals. For any other strategy you need to modify the main program. My wish list includes parameterisation of this strategy peice as well. 
 
