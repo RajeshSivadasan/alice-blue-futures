@@ -6,8 +6,8 @@ This program is focused on Nifty and Crude futures with a simple Supertrend with
 Initially, I had developed this for windows then later moved to linux (ubuntu) platform on AWS. Now I am working on moving this to Oracle cloud as its free :) and this version works smoothly with the free tier as well ;-) 
 
 There are 2 programs: 
-1. For Options trading - ab_options.py which uses ab_options.ini as configuration/parameter file.
-2. For Futures trading - ab.py which uses ab.ini as configuration/parameter file.
+1. For Options trading (Requires 10-15k capital) - ab_options.py which uses ab_options.ini as configuration/parameter file.
+2. For Futures trading (Requires 2.5 to 4 lakhs capital) - ab.py which uses ab.ini as configuration/parameter file.
 
 These programs basically uses 3min (low) , 6min (medium) time frame supertrend and RSI indicators (adjusted through parameters) to generate signals. For any other strategy you need to modify the main program. My wish list includes parameterisation of this strategy peice as well. 
 
