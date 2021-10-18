@@ -24,6 +24,9 @@
 #v7.2.3 TSL logic updates in check_orders() and place_sl_order()
 #v7.2.4 Removed unwanted comments, updated 
 #v7.2.5 TSL logic updated in check_orders() and minor changes in place_sl_order()
+#v7.2.6 fixed UnboundLocalError: local variable 'bank_bo1_qty' referenced before assignment
+
+
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -678,10 +681,11 @@ def buy_bank_options(strMsg):
             # order = squareOff_MIS(TransactionType.Buy, ins_bank_opt,bank_bo1_qty)
             # order_tag = datetime.datetime.now().strftime("BN_%H%M%S")
             # IF BO2 is enabled then trade quantity needs to be doubled. Two SL/TGT Orders will be placed with the below quantity 
+            bo1_qty = bank_bo1_qty
             if enableBO2_bank: 
-                bank_bo1_qty = bank_bo1_qty*2
+                bo1_qty = bank_bo1_qty*2
             
-            order = squareOff_MIS(TransactionType.Buy, ins_bank_opt,bank_bo1_qty, OrderType.Limit, lt_price)
+            order = squareOff_MIS(TransactionType.Buy, ins_bank_opt, bo1_qty, OrderType.Limit, lt_price)
             if order['status'] == 'success':
                 strMsg = strMsg + " buy_bank(): Initiating place_sl_order(). main_order_id=" + str(order['data']['oms_order_id']) 
                 iLog(strMsg,sendTeleMsg=True)   # Can be commented later
@@ -692,7 +696,7 @@ def buy_bank_options(strMsg):
                 strMsg = strMsg + ' buy_bank(): MIS Order Failed.' + order['message']
                 iLog(strMsg,sendTeleMsg=True)
 
-
+        # BO option may not work as usually BO is disabled in alice blue for options, hence not updating the below code for BO
         elif bank_ord_type == "BO" :
             #---- First Bracket order for initial target
             order = buy_signal(ins_bank_opt,bank_bo1_qty,lt_price,bank_sl,bank_tgt1,bank_tsl)    #SL to be float; 
