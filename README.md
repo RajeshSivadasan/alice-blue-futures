@@ -26,3 +26,8 @@ Will update proper documentation soon...
 Although this is still work in progress, kindly suggest your feedback. It will help me improve.
 
 Feel free to use/distribute this code freely so that new algo developers can get started easily.  
+
+For folks who are interested in learning Algo Programming for Indian Stock exchanges can join this informative, valuable and highly active Telegram Group
+https://t.me/AlgoTradeAnalysis
+(Please note this is not my Telegram Group)
+
