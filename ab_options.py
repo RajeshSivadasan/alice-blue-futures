@@ -31,7 +31,7 @@
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
 # Trade Timing : Morning 9:15 to 10:40 AM , After noon 1.30 PM to 3.30 PM 
-# Trading Capital : Rs 20,000
+# Trading Capital : Rs 20,000 
 # Trading Qty : 1 Lot for short goal, 1 lot long goal
 # Premarket Routine : TBD
 # Trading Goals : Nifty(Short Goal = 20 Points, Long Goal = 200 pts with TSL)
