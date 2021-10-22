@@ -26,6 +26,7 @@
 #v7.2.5 TSL logic updated in check_orders() and minor changes in place_sl_order()
 #v7.2.6 fixed UnboundLocalError: local variable 'bank_bo1_qty' referenced before assignment
 #v7.2.7 check_orders(). Passed trigger price in the modify_order as it was getting triggered immediately
+#v7.2.8 Limit price constraint parameterised, updated nifty_buy_opitons. Now nifty options with BO can be enabled
 
 
 ###### STRATEGY / TRADE PLAN #####
@@ -220,6 +221,11 @@ pending_ord_limit_mins = int(cfg.get("info", "pending_ord_limit_mins")) # Close 
 nifty_trade_start_time = int(cfg.get("info", "nifty_trade_start_time"))
 nifty_trade_end_time = int(cfg.get("info", "nifty_trade_end_time"))
 sl_wait_time = int(cfg.get("info", "sl_wait_time"))
+nifty_limit_price_low = int(cfg.get("info", "nifty_limit_price_low"))
+nifty_limit_price_high = int(cfg.get("info", "nifty_limit_price_high"))
+bank_limit_price_low = int(cfg.get("info", "bank_limit_price_low"))
+bank_limit_price_high = int(cfg.get("info", "bank_limit_price_high"))
+
 
 lst_nifty_ltp = []
 lst_bank_ltp = []
@@ -543,8 +549,8 @@ def buy_nifty_options(strMsg):
 
     strMsg = strMsg + " Limit Price=" + str(lt_price) + " SL=" + str(nifty_sl)
 
-    # Can be parameterised
-    if lt_price<30 or lt_price>350 :
+    
+    if lt_price<nifty_limit_price_low or lt_price>nifty_limit_price_high :
         strMsg = strMsg + " buy_nifty(): Limit Price not in buying range."
         iLog(strMsg,2,sendTeleMsg=True)
         return
@@ -578,7 +584,13 @@ def buy_nifty_options(strMsg):
             #---- Intraday order (MIS) , Market Order
             # order = squareOff_MIS(TransactionType.Buy, ins_nifty_opt,nifty_bo1_qty)
             # order_tag = datetime.datetime.now().strftime("NF_%H%M%S")
-            order = squareOff_MIS(TransactionType.Buy, ins_nifty_opt,nifty_bo1_qty, OrderType.Limit, lt_price)
+            
+            bo1_qty = nifty_bo1_qty
+            if enableBO2_nifty: 
+                bo1_qty = nifty_bo1_qty*2
+            
+            
+            order = squareOff_MIS(TransactionType.Buy, ins_nifty_opt, bo1_qty, OrderType.Limit, lt_price)
             if order['status'] == 'success':
                 strMsg = strMsg + " buy_nifty(): Initiating place_sl_order(). main_order_id==" +  str(order['data']['oms_order_id'])
                 iLog(strMsg,sendTeleMsg=True)   # Can be commented later
@@ -646,7 +658,7 @@ def buy_bank_options(strMsg):
     strMsg = strMsg + " Limit Price=" + str(lt_price) + " SL=" + str(bank_sl)
 
     
-    if lt_price<50 or lt_price>400 :
+    if lt_price<bank_limit_price_low or lt_price>bank_limit_price_high :
         strMsg = strMsg + " buy_bank(): Limit Price not in buying range."
         iLog(strMsg,2,sendTeleMsg=True)
         return
