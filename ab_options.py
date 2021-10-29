@@ -27,7 +27,7 @@
 #v7.2.6 fixed UnboundLocalError: local variable 'bank_bo1_qty' referenced before assignment
 #v7.2.7 check_orders(). Passed trigger price in the modify_order as it was getting triggered immediately
 #v7.2.8 Limit price constraint parameterised, updated nifty_buy_opitons. Now nifty options with BO can be enabled
-
+#v7.2.9 Minor logging in procedures, updated TSL logic to include SL
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -370,7 +370,7 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
             orders = alice.get_order_history()["data"]["completed_orders"]
             for ord in orders:
                 if ord["oms_order_id"]==main_order_id:
-                    print(f"In place_sl_order(): Order Details =",ord, flush=True)
+                    # print(f"In place_sl_order(): Order Details =",ord, flush=True)
                     # Order may be rejected as well
                     if ord["order_status"]=="complete": 
                         lt_price = ord["price"]
@@ -532,6 +532,16 @@ def buy_nifty_options(strMsg):
 
     df_nifty.iat[-1,5] = "B"  # v1.1 set signal column value
 
+    if not trade_nfo:
+        strMsg = strMsg + " buy_nifty(): trade_nfo=0. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
+
+    if not check_trade_time_zone("NIFTY"):
+        strMsg = strMsg + " buy_nifty(): No trade time zone. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
+
 
     # strMsg == NIFTY_CE | NIFTY_PE 
     lt_price, nifty_sl = get_trade_price_options(strMsg,"BUY",nifty_ord_exec_level1)   # Get trade price and SL for BO1 
@@ -555,16 +565,6 @@ def buy_nifty_options(strMsg):
         iLog(strMsg,2,sendTeleMsg=True)
         return
     
-    if not trade_nfo:
-        strMsg = strMsg + " buy_nifty(): trade_nfo=0. Order not initiated."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
-    if not check_trade_time_zone("NIFTY"):
-        strMsg = strMsg + " buy_nifty(): No trade time zone. Order not initiated."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
 
     # Find CE or PE Position
     if pos_nifty > 0:   # Position updates in MTM check
@@ -640,6 +640,16 @@ def buy_bank_options(strMsg):
 
     df_bank.iat[-1,5] = "B"  # v1.1 set signal column value
 
+    if not trade_bank :
+        strMsg = strMsg + " buy_bank(): trade_bank=0. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
+
+    if not check_trade_time_zone("NIFTY"):
+        strMsg = strMsg + " buy_bank(): No trade time zone. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
+
 
     # strMsg == CE | PE 
     lt_price, bank_sl = get_trade_price_options(strMsg,"BUY",bank_ord_exec_level1)   # Get trade price and SL for BO1 
@@ -660,16 +670,6 @@ def buy_bank_options(strMsg):
     
     if lt_price<bank_limit_price_low or lt_price>bank_limit_price_high :
         strMsg = strMsg + " buy_bank(): Limit Price not in buying range."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
-    if not trade_bank :
-        strMsg = strMsg + " buy_bank(): trade_bank=0. Order not initiated."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
-    if not check_trade_time_zone("NIFTY"):
-        strMsg = strMsg + " buy_bank(): No trade time zone. Order not initiated."
         iLog(strMsg,2,sendTeleMsg=True)
         return
 
@@ -903,6 +903,8 @@ def get_trade_price_options(bank_nifty,buy_sell,bo_level=1):
     buy_sell=BUY/SELL, bo_level or Order execution level = 1(default means last close),2,3 and 0 for close -1 for market order
     '''
 
+    iLog("In get_trade_price_options():{bank_nifty}")
+
     lt_price = 0.0
 
     # atr = 0
@@ -1006,6 +1008,8 @@ def get_option_tokens(nifty_bank="ALL"):
     '''This procedure sets the current option tokens to the latest ATM tokens
     nifty_bank="NIFTY" | "BANK" | "ALL"
     '''
+
+    iLog(f"In get_option_tokens():{nifty_bank}")
 
     #WIP
     global token_nifty_ce, token_nifty_pe, ins_nifty_ce, ins_nifty_pe, \
@@ -1128,8 +1132,9 @@ def check_orders():
 
     #2. Check the current price of the SL orders and if they are above tgt modify them to target price
     # dict_sl_orders => key=order ID : value = [0-token, 1-target price,2-instrument, 3-quantity, 4-SL Price]
+    tsl = bank_tsl  + bank_sl
+    iLog(f"tsl={tsl}")
     for oms_order_id, value in dict_sl_orders.items():
-        tsl = bank_tsl  
         ltp = dict_ltp[value[0]]
         iLog(f"oms_order_id={oms_order_id}, ltp={ltp}, Target={float(value[1])}, bank_tsl={bank_tsl}, SL Price={float(value[4])}")
         #Set Target Price : current ltp > target price
