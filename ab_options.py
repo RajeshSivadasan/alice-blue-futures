@@ -1132,8 +1132,8 @@ def check_orders():
 
     #2. Check the current price of the SL orders and if they are above tgt modify them to target price
     # dict_sl_orders => key=order ID : value = [0-token, 1-target price,2-instrument, 3-quantity, 4-SL Price]
-    tsl = bank_tsl  + bank_sl
-    iLog(f"tsl={tsl}")
+    tsl = bank_tsl  #+ bank_sl
+    # iLog(f"tsl={tsl}")
     for oms_order_id, value in dict_sl_orders.items():
         ltp = dict_ltp[value[0]]
         iLog(f"oms_order_id={oms_order_id}, ltp={ltp}, Target={float(value[1])}, bank_tsl={bank_tsl}, SL Price={float(value[4])}")
