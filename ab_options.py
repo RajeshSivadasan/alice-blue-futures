@@ -28,6 +28,7 @@
 #v7.2.7 check_orders(). Passed trigger price in the modify_order as it was getting triggered immediately
 #v7.2.8 Limit price constraint parameterised, updated nifty_buy_opitons. Now nifty options with BO can be enabled
 #v7.2.9 Minor logging in procedures, updated TSL logic to include SL
+#v7.3.0 Major changes done: ST Medium removed from strategy, purely based on ST low (3min). Signal was comming too late.
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -388,8 +389,6 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
 
     if order_executed:
         time.sleep(2)  #As order might not be completely filled / alice blue takes time to recognise margin.
-        #place SL order
-        #---- Intraday order (MIS) , SL Order
         
         if nifty_bank == "NIFTY": 
             # ins_opt =  ins_bank_opt
@@ -407,6 +406,8 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
 
         sl_price = float(lt_price-sl)
         
+        #place SL order
+        #---- Intraday order (MIS) , SL Order
         order = squareOff_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit, sl_price)
         if order['status'] == 'success':
             strMsg = f"In place_sl_order(1): MIS SL1 order_id={order['data']['oms_order_id']}, StopLoss Price={sl_price}"
@@ -903,7 +904,7 @@ def get_trade_price_options(bank_nifty,buy_sell,bo_level=1):
     buy_sell=BUY/SELL, bo_level or Order execution level = 1(default means last close),2,3 and 0 for close -1 for market order
     '''
 
-    iLog("In get_trade_price_options():{bank_nifty}")
+    iLog(f"In get_trade_price_options():{bank_nifty}")
 
     lt_price = 0.0
 
@@ -1357,10 +1358,11 @@ while True:
             # #######################################
             if df_bank_cnt > 6 and cur_HHMM > 914 and cur_HHMM < 1531:        # Calculate Nifty indicators and call buy/sell
 
-                SuperTrend(df_bank)                    # Low level (2/3min) timeframe calculations
-                RSI(df_bank,period=7)                 # RSI Calculations
-                super_trend_bank = df_bank.STX.values     # Get ST values into a list
-                SuperTrend(df_bank_med)                # Medium level (6min) timeframe calculations
+                SuperTrend(df_bank)                     # Low level (2/3min) timeframe calculations
+                # RSI not used in this strategy
+                # RSI(df_bank,period=7)                   # RSI Calculations
+                super_trend_bank = df_bank.STX.values   # Get ST values into a list
+                # SuperTrend(df_bank_med)                 # Medium level (6min) timeframe calculations
 
                 strMsg="BankNifty: #={}, ST_LOW={}, ST_LOW_SL={}, ATR={}, ST_MED={}, ST_MED_SL={}, ltp_bank_ATM_CE={}, ltp_bank_ATM_PE={}".format(df_bank_cnt, super_trend_bank[-1], round(df_bank.ST.iloc[-1]), round(df_bank.ATR.iloc[-1],1), df_bank_med.STX.iloc[-1], round(df_bank_med.ST.iloc[-1]), ltp_bank_ATM_CE, ltp_bank_ATM_PE)
                 iLog(strMsg)
@@ -1368,66 +1370,12 @@ while True:
                 # -- ST LOW
                 #--BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY
                 if super_trend_bank[-1]=='up' and super_trend_bank[-2]=='down' and super_trend_bank[-3]=='down' and super_trend_bank[-4]=='down' and super_trend_bank[-5]=='down' and super_trend_bank[-6]=='down':
-                    #Buy only if both medium and lower ST is in buy zone
-                    if df_bank_med.STX.iloc[-1] == 'down':
-                        strMsg = "BANK ST=up, ST_MEDIUM=down. Sell order to be placed - Deactivated. Closing existing Bank positions."
-                        iLog(strMsg,sendTeleMsg=True)
-                        close_all_orders("BANK")
-                    else:   # ST_MEDIUM=='up'
-                        strMsg = "BANK ST=up, ST_MEDIUM=up. CE Buy Order to be placed. "
-                        iLog(strMsg,sendTeleMsg=True)
-                        buy_bank_options("BANK_CE")
-      
-
+                    buy_bank_options("BANK_CE")
+  
                 # -- ST LOW        
                 #---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL        
                 elif super_trend_bank[-1]=='down' and super_trend_bank[-2]=='up' and super_trend_bank[-3]=='up' and super_trend_bank[-4]=='up' and super_trend_bank[-5]=='up' and super_trend_bank[-6]=='up':
-                    #Sell only if both medium and lower ST is in sell zone
-                    if df_bank_med.STX.iloc[-1] == 'up':
-                        strMsg = "BANK ST=down, ST_MEDIUM=up. Buy Order to be placed - Deactivated. Closing existing Bank positions."
-                        iLog(strMsg,sendTeleMsg=True)
-                        # buy_nifty(strMsg)
-                        close_all_orders("BANK")
-                    else:
-                        strMsg = "BANK ST=down, ST_MEDIUM=down. PE Buy Order to be placed. "
-                        iLog(strMsg,sendTeleMsg=True)
-                        buy_bank_options("BANK_PE")
-      
-
-                # ST MEDIUM
-                #--BUY---BUY---BUY
-                elif df_bank_med.STX.iloc[-1]=='up' and df_bank_med.STX.iloc[-2]=='down' and df_bank_med.STX.iloc[-3]=='down' and df_bank_med.STX.iloc[-4]=='down':
-                    # Ensure both are in same direction
-                    if super_trend_bank[-1] == 'up':
-                        if flg_med_bank :
-                            strMsg = "BANK ST_MEDIUM=up, ST=up. CE Buy Order to be placed. "
-                            iLog(strMsg,sendTeleMsg=True)
-                            # buy_bank(strMsg)
-                            buy_bank_options("BANK_CE")
-                        else:
-                            iLog("BANK ST_MEDIUM=up, ST=up. Consecutive bank buy order skipped.")
-
-
-                    else:
-                        strMsg="BANK ST_MEDIUM=up, ST=down. Buy not triggered. Need Investigation."
-                        iLog(strMsg,sendTeleMsg=True)
-
-                #---SELL---SELL---SELL
-                elif df_bank_med.STX.iloc[-1]=='down' and df_bank_med.STX.iloc[-2]=='up' and df_bank_med.STX.iloc[-3]=='up' and df_bank_med.STX.iloc[-4]=='up':
-                    # Ensure both are in same direction
-                    if super_trend_bank[-1] == 'down':
-                        if flg_med_bank :
-                            strMsg = "BANK ST_MEDIUM=down, ST=down. PE Buy Order to be placed. "
-                            # sell_bank(strMsg)
-                            buy_bank_options("BANK_PE")
-                        else:
-                            iLog("BANK ST_MEDIUM=down, ST=down. Consecutive BANK SELL order skipped.")
-
-                    else:
-                        strMsg = "BANK ST_MEDIUM=down, ST=up. Sell not triggered. Need Investigation."
-                        iLog(strMsg,sendTeleMsg=True)
-
-
+                    buy_bank_options("BANK_PE")
       
       
             # Nifty - Only 5 ST values checked in condition as compared to bank
@@ -1437,9 +1385,10 @@ while True:
             if df_nifty_cnt > 6 and cur_HHMM > 914 and cur_HHMM < 1531:        # Calculate Nifty indicators and call buy/sell
 
                 SuperTrend(df_nifty)                    # Low level (2/3min) timeframe calculations
-                RSI(df_nifty,period=7)                 # RSI Calculations
+                # RSI not used in this strategy
+                # RSI(df_nifty,period=7)                 # RSI Calculations
                 super_trend_nifty = df_nifty.STX.values     # Get ST values into a list
-                SuperTrend(df_nifty_med)                # Medium level (6min) timeframe calculations
+                # SuperTrend(df_nifty_med)                # Medium level (6min) timeframe calculations
 
                 strMsg="Nifty: #={}, ST_LOW={}, ST_LOW_SL={}, ATR={}, ST_MED={}, ST_MED_SL={}, ltp_nifty_ATM_CE={}, ltp_nifty_ATM_PE={}".format(df_nifty_cnt, super_trend_nifty[-1], round(df_nifty.ST.iloc[-1]), round(df_nifty.ATR.iloc[-1],1), df_nifty_med.STX.iloc[-1], round(df_nifty_med.ST.iloc[-1]), ltp_nifty_ATM_CE, ltp_nifty_ATM_PE)
                 iLog(strMsg)
@@ -1447,17 +1396,18 @@ while True:
                 # -- ST LOW
                 #--BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY
                 if super_trend_nifty[-1]=='up' and super_trend_nifty[-2]=='down' and super_trend_nifty[-3]=='down' and super_trend_nifty[-4]=='down' and super_trend_nifty[-5]=='down' and super_trend_nifty[-6]=='down':
-                    #print("Nifty close=",df_nifty.close.iloc[-1],flush=True)
-                    #print("RSI[-1]=",df_nifty.RSI.iloc[-1],flush=True)
-                    #Buy only if both medium and lower ST is in buy zone
-                    if df_nifty_med.STX.iloc[-1] == 'down':
-                        strMsg = "NIFTY ST=up, ST_MEDIUM=down. Sell order to be placed - Deactivated. Closing existing Nifty positions."
-                        iLog(strMsg,sendTeleMsg=True)
-                        close_all_orders("NIFTY")
-                    else:   # ST_MEDIUM=='up'
-                        strMsg = "NIFTY ST=up, ST_MEDIUM=up. CE Buy Order to be placed. "
-                        iLog(strMsg,sendTeleMsg=True)
-                        buy_nifty_options("NIFTY_CE")
+                    buy_nifty_options("NIFTY_CE")
+                    # #print("Nifty close=",df_nifty.close.iloc[-1],flush=True)
+                    # #print("RSI[-1]=",df_nifty.RSI.iloc[-1],flush=True)
+                    # #Buy only if both medium and lower ST is in buy zone
+                    # if df_nifty_med.STX.iloc[-1] == 'down':
+                    #     strMsg = "NIFTY ST=up, ST_MEDIUM=down. Sell order to be placed - Deactivated. Closing existing Nifty positions."
+                    #     iLog(strMsg,sendTeleMsg=True)
+                    #     close_all_orders("NIFTY")
+                    # else:   # ST_MEDIUM=='up'
+                    #     strMsg = "NIFTY ST=up, ST_MEDIUM=up. CE Buy Order to be placed. "
+                    #     iLog(strMsg,sendTeleMsg=True)
+                    #     buy_nifty_options("NIFTY_CE")
                         # sell_nifty(strMsg)
                         # Experiment
                         # Buy 
@@ -1481,16 +1431,17 @@ while True:
                 # -- ST LOW        
                 #---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL        
                 elif super_trend_nifty[-1]=='down' and super_trend_nifty[-2]=='up' and super_trend_nifty[-3]=='up' and super_trend_nifty[-4]=='up' and super_trend_nifty[-5]=='up' and super_trend_nifty[-6]=='up':
-                    #Sell only if both medium and lower ST is in sell zone
-                    if df_nifty_med.STX.iloc[-1] == 'up':
-                        strMsg = "NIFTY ST=down, ST_MEDIUM='up'. Buy Order to be placed - Deactivated. Closing existing Nifty positions."
-                        iLog(strMsg,sendTeleMsg=True)
-                        # buy_nifty(strMsg)
-                        close_all_orders("NIFTY")
-                    else:
-                        strMsg = "NIFTY ST=down, ST_MEDIUM=down. PE Buy Order to be placed. "
-                        iLog(strMsg,sendTeleMsg=True)
-                        buy_nifty_options("NIFTY_PE")
+                    buy_nifty_options("NIFTY_PE")
+                    # #Sell only if both medium and lower ST is in sell zone
+                    # if df_nifty_med.STX.iloc[-1] == 'up':
+                    #     strMsg = "NIFTY ST=down, ST_MEDIUM='up'. Buy Order to be placed - Deactivated. Closing existing Nifty positions."
+                    #     iLog(strMsg,sendTeleMsg=True)
+                    #     # buy_nifty(strMsg)
+                    #     close_all_orders("NIFTY")
+                    # else:
+                    #     strMsg = "NIFTY ST=down, ST_MEDIUM=down. PE Buy Order to be placed. "
+                    #     iLog(strMsg,sendTeleMsg=True)
+                    #     buy_nifty_options("NIFTY_PE")
                     # elif df_nifty.RSI.iloc[-1] < rsi_sell_param and df_nifty.RSI.iloc[-1] > rsi_buy_param:
                         
                     #     c1 = round( ( df_nifty.RSI.iloc[-2] - df_nifty.RSI.iloc[-3] ) / df_nifty.RSI.iloc[-3] , 3 )
@@ -1508,38 +1459,6 @@ while True:
                     # else:
                     #     strMsg = "NIFTY ST=down close=" + str(df_nifty.close.iloc[-1]) +", RSI NOSELL=" + str(df_nifty.RSI.iloc[-1])   
                     #     iLog(strMsg,sendTeleMsg=True)
-
-                # ST MEDIUM
-                #--BUY---BUY---BUY
-                elif df_nifty_med.STX.iloc[-1]=='up' and df_nifty_med.STX.iloc[-2]=='down' and df_nifty_med.STX.iloc[-3]=='down' and df_nifty_med.STX.iloc[-4]=='down':
-                    # Ensure both are in same direction
-                    if super_trend_nifty[-1] == 'up':
-                        if flg_med_nifty :
-                            strMsg = "NIFTY ST_MEDIUM=up, ST=up. CE Buy Order to be placed. "
-                            # buy_nifty(strMsg)
-                            buy_nifty_options("NIFTY_CE")
-                        else:
-                            iLog("NIFTY ST_MEDIUM=up, ST=up. Consecutive nifty buy order skipped.")
-
-
-                    else:
-                        strMsg="NIFTY ST_MEDIUM=up, ST=down. Buy not triggered. Need Investigation."
-                        iLog(strMsg,sendTeleMsg=True)
-
-                #---SELL---SELL---SELL
-                elif df_nifty_med.STX.iloc[-1]=='down' and df_nifty_med.STX.iloc[-2]=='up' and df_nifty_med.STX.iloc[-3]=='up' and df_nifty_med.STX.iloc[-4]=='up':
-                    # Ensure both are in same direction
-                    if super_trend_nifty[-1] == 'down':
-                        if flg_med_nifty :
-                            strMsg = "NIFTY ST_MEDIUM=down, ST=down. PE Buy Order to be placed. "
-                            # sell_nifty(strMsg)
-                            buy_nifty_options("NIFTY_PE")
-                        else:
-                            iLog("NIFTY ST_MEDIUM=down, ST=down. Consecutive Nifty SELL order skipped.")
-
-                    else:
-                        strMsg = "NIFTY ST_MEDIUM=down, ST=up. Sell not triggered. Need Investigation."
-                        iLog(strMsg,sendTeleMsg=True)
 
 
             #-- Find processing time and Log only if processing takes more than 2 seconds
