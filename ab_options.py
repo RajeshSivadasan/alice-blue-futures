@@ -29,6 +29,8 @@
 #v7.2.8 Limit price constraint parameterised, updated nifty_buy_opitons. Now nifty options with BO can be enabled
 #v7.2.9 Minor logging in procedures, updated TSL logic to include SL
 #v7.3.0 Major changes done: ST Medium removed from strategy, purely based on ST low (3min). Signal was comming too late.
+#v7.3.1 Bugs, ST_Med related fields removed
+#v7.3.2 Implemented nifty_limit_price_offset and bank_limit_price_offset; Removed bo_level parameters as they are not applicable for options 
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -158,14 +160,9 @@ bank_bo3_qty = int(cfg.get("realtime", "bank_bo3_qty"))
 sl_buffer = int(cfg.get("realtime", "sl_buffer"))
 nifty_ord_type = cfg.get("realtime", "nifty_ord_type")      # BO / MIS
 bank_ord_type = cfg.get("realtime", "bank_ord_type")      # MIS / BO
-# atr * level * 0.5 (lvl = 0->close, -1->Mkt Price, 1,2,3..based on times of atr gap required)
-nifty_ord_exec_level1 = float(cfg.get("realtime", "nifty_ord_exec_level1"))
-nifty_ord_exec_level2 = float(cfg.get("realtime", "nifty_ord_exec_level2"))
-nifty_ord_exec_level3 = float(cfg.get("realtime", "nifty_ord_exec_level3"))
 
-bank_ord_exec_level1 = float(cfg.get("realtime", "bank_ord_exec_level1"))
-bank_ord_exec_level2 = float(cfg.get("realtime", "bank_ord_exec_level2"))
-bank_ord_exec_level3 = float(cfg.get("realtime", "bank_ord_exec_level3"))
+nifty_limit_price_offset = float(cfg.get("realtime", "nifty_limit_price_offset"))
+bank_limit_price_offset = float(cfg.get("realtime", "bank_limit_price_offset"))
 
 nifty_strike_ce_offset = float(cfg.get("realtime", "nifty_strike_ce_offset"))
 nifty_strike_pe_offset = float(cfg.get("realtime", "nifty_strike_pe_offset"))
@@ -287,9 +284,9 @@ ltp_bank_ATM_PE = 0             # Last traded price for BankNifty ATM PE
 def get_realtime_config():
     '''This procedure can be called during execution to get realtime values from the .ini file'''
 
-    global trade_nfo, trade_bank, enableBO2_bank, enableBO2_nifty, enableBO3_nifty,nifty_ord_exec_level1,bank_ord_exec_level1\
+    global trade_nfo, trade_bank, enableBO2_bank, enableBO2_nifty, enableBO3_nifty,nifty_limit_price_offset,bank_limit_price_offset\
     ,mtm_sl,mtm_target, cfg, nifty_sl, bank_sl, export_data, sl_buffer, nifty_ord_type, bank_ord_type\
-        ,nifty_strike_ce_offset, nifty_strike_pe_offset, bank_strike_ce_offset, bank_strike_pe_offset
+    ,nifty_strike_ce_offset, nifty_strike_pe_offset, bank_strike_ce_offset, bank_strike_pe_offset
 
     cfg.read(INI_FILE)
     
@@ -307,8 +304,10 @@ def get_realtime_config():
     sl_buffer = int(cfg.get("realtime", "sl_buffer"))
     nifty_ord_type = cfg.get("realtime", "nifty_ord_type")      # BO / MIS
     bank_ord_type = cfg.get("realtime", "bank_ord_type")        # MIS / BO
-    nifty_ord_exec_level1 = float(cfg.get("realtime", "nifty_ord_exec_level1"))
-    bank_ord_exec_level1 = float(cfg.get("realtime", "bank_ord_exec_level1"))
+
+    nifty_limit_price_offset = float(cfg.get("realtime", "nifty_limit_price_offset"))
+    bank_limit_price_offset = float(cfg.get("realtime", "bank_limit_price_offset"))
+
     nifty_strike_ce_offset = float(cfg.get("realtime", "nifty_strike_ce_offset"))
     nifty_strike_pe_offset = float(cfg.get("realtime", "nifty_strike_pe_offset"))
     bank_strike_ce_offset = float(cfg.get("realtime", "bank_strike_ce_offset"))
@@ -545,18 +544,17 @@ def buy_nifty_options(strMsg):
 
 
     # strMsg == NIFTY_CE | NIFTY_PE 
-    lt_price, nifty_sl = get_trade_price_options(strMsg,"BUY",nifty_ord_exec_level1)   # Get trade price and SL for BO1 
+    lt_price, nifty_sl = get_trade_price_options(strMsg)   # Get trade price and SL for BO1 
    
     df_nifty.iat[-1,6] = nifty_sl  # v3.7 set sl column value. This is only for BO1; rest BOs will different SLs 
 
     # iLog(strMsg)    #can be commented later
-
+   
     #Warning: No initialisation done
     if strMsg == "NIFTY_CE" :
         ins_nifty_opt = ins_nifty_ce
     elif strMsg == "NIFTY_PE" :
         ins_nifty_opt = ins_nifty_pe
-    
 
     strMsg = strMsg + " Limit Price=" + str(lt_price) + " SL=" + str(nifty_sl)
 
@@ -653,7 +651,7 @@ def buy_bank_options(strMsg):
 
 
     # strMsg == CE | PE 
-    lt_price, bank_sl = get_trade_price_options(strMsg,"BUY",bank_ord_exec_level1)   # Get trade price and SL for BO1 
+    lt_price, bank_sl = get_trade_price_options(strMsg)   # Get trade price and SL for BO1 
    
     df_bank.iat[-1,6] = bank_sl  # v3.7 set sl column value. This is only for BO1; rest BOs will different SLs 
 
@@ -899,7 +897,7 @@ def check_MTM_Limit():
 
     return mtm
 
-def get_trade_price_options(bank_nifty,buy_sell,bo_level=1):
+def get_trade_price_options(bank_nifty):
     '''Returns the trade price and stop loss abs value for bank/nifty=CRUDE/NIFTY
     buy_sell=BUY/SELL, bo_level or Order execution level = 1(default means last close),2,3 and 0 for close -1 for market order
     '''
@@ -919,13 +917,13 @@ def get_trade_price_options(bank_nifty,buy_sell,bo_level=1):
 
     # 1. Set default limit price, below offset can be parameterised
     if bank_nifty == "NIFTY_CE" :
-        lt_price = int(ltp_nifty_ATM_CE) + 2 # Set Default trade price
+        lt_price = int(ltp_nifty_ATM_CE) + nifty_limit_price_offset # Set Default trade price
     elif bank_nifty == "NIFTY_PE" :
-        lt_price = int(ltp_nifty_ATM_PE) + 2 # Set Default trade price
+        lt_price = int(ltp_nifty_ATM_PE) + nifty_limit_price_offset # Set Default trade price
     elif bank_nifty == "BANK_CE" :
-        lt_price = int(ltp_bank_ATM_CE) + 5
+        lt_price = int(ltp_bank_ATM_CE) + bank_limit_price_offset
     elif bank_nifty == "BANK_PE" :
-        lt_price = int(ltp_bank_ATM_PE) + 5
+        lt_price = int(ltp_bank_ATM_PE) + bank_limit_price_offset
     else:
         print("get_trade_price_options1",flush=True)
     
@@ -1322,7 +1320,7 @@ while True:
                 df_bank_cnt = df_bank_cnt + 1 
                 # open = df_bank.close.tail(3).head(1)  # First value  
                 flg_med_bank = 0
-                strMsg = strMsg + " " + str(tmp_lst[-1])      #Crude close 
+                strMsg = strMsg + " " + str(round(tmp_lst[-1]))      #Crude close 
 
                 if cur_min % 6 == 0 :
                     df_bank_med.loc[df_bank_med_cnt,df_cols] = [cur_HHMM, df_bank.open.tail(3).head(1).iloc[0], df_bank.high.tail(3).max(), df_bank.low.tail(3).min(), df_bank.close.iloc[-1], "",0 ] 
@@ -1338,7 +1336,7 @@ while True:
                 df_nifty.loc[df_nifty_cnt,df_cols] = [cur_HHMM,tmp_lst[0],max(tmp_lst),min(tmp_lst),tmp_lst[-1],"",0]
                 df_nifty_cnt = df_nifty_cnt + 1
                 flg_med_nifty = 0
-                strMsg = strMsg + " " + str(tmp_lst[-1])      #Nifty close
+                strMsg = strMsg + " " + str(round(tmp_lst[-1]))      #Nifty close
 
                 if cur_min % 6 == 0 :
                     df_nifty_med.loc[df_nifty_med_cnt,df_cols] = [cur_HHMM, df_nifty.open.tail(3).head(1).iloc[0], df_nifty.high.tail(3).max(), df_nifty.low.tail(3).min(), df_nifty.close.iloc[-1], "", 0] 
@@ -1364,7 +1362,7 @@ while True:
                 super_trend_bank = df_bank.STX.values   # Get ST values into a list
                 # SuperTrend(df_bank_med)                 # Medium level (6min) timeframe calculations
 
-                strMsg="BankNifty: #={}, ST_LOW={}, ST_LOW_SL={}, ATR={}, ST_MED={}, ST_MED_SL={}, ltp_bank_ATM_CE={}, ltp_bank_ATM_PE={}".format(df_bank_cnt, super_trend_bank[-1], round(df_bank.ST.iloc[-1]), round(df_bank.ATR.iloc[-1],1), df_bank_med.STX.iloc[-1], round(df_bank_med.ST.iloc[-1]), ltp_bank_ATM_CE, ltp_bank_ATM_PE)
+                strMsg=f"BankNifty: #={df_bank_cnt}, ST_LOW={super_trend_bank[-1]}, ST_LOW_SL={round(df_bank.ST.iloc[-1])}, ATR={round(df_bank.ATR.iloc[-1],1)}, ltp_bank_ATM_CE={ltp_bank_ATM_CE}, ltp_bank_ATM_PE={ltp_bank_ATM_PE}"
                 iLog(strMsg)
 
                 # -- ST LOW
@@ -1390,7 +1388,7 @@ while True:
                 super_trend_nifty = df_nifty.STX.values     # Get ST values into a list
                 # SuperTrend(df_nifty_med)                # Medium level (6min) timeframe calculations
 
-                strMsg="Nifty: #={}, ST_LOW={}, ST_LOW_SL={}, ATR={}, ST_MED={}, ST_MED_SL={}, ltp_nifty_ATM_CE={}, ltp_nifty_ATM_PE={}".format(df_nifty_cnt, super_trend_nifty[-1], round(df_nifty.ST.iloc[-1]), round(df_nifty.ATR.iloc[-1],1), df_nifty_med.STX.iloc[-1], round(df_nifty_med.ST.iloc[-1]), ltp_nifty_ATM_CE, ltp_nifty_ATM_PE)
+                strMsg=f"Nifty: #={df_nifty_cnt}, ST_LOW={super_trend_nifty[-1]}, ST_LOW_SL={round(df_nifty.ST.iloc[-1])}, ATR={round(df_nifty.ATR.iloc[-1],1)}, ltp_nifty_ATM_CE={ltp_nifty_ATM_CE}, ltp_nifty_ATM_PE={ltp_nifty_ATM_PE}"
                 iLog(strMsg)
 
                 # -- ST LOW
