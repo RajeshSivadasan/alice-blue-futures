@@ -31,6 +31,7 @@
 #v7.3.0 Major changes done: ST Medium removed from strategy, purely based on ST low (3min). Signal was comming too late.
 #v7.3.1 Bugs, ST_Med related fields removed
 #v7.3.2 Implemented nifty_limit_price_offset and bank_limit_price_offset; Removed bo_level parameters as they are not applicable for options 
+#v7.3.3 check_orders(): Bug, Changed limit order to SL limit for TSL updation
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -433,7 +434,7 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
     else:
         #cancel main order
         ret = alice.cancel_order(main_order_id)
-        print("ret=alice.cancel_order()=>",ret, flush=True)
+        print("place_sl_order(): ret=alice.cancel_order()=>",ret, flush=True)
         strMsg = "place_sl_order(): main order= not executed within the wait time of 120 seconds, hence cancelled the order " + main_order_id
 
     iLog(strMsg,sendTeleMsg=True)
@@ -1150,7 +1151,7 @@ def check_orders():
         elif (ltp - value[4]) > tsl :
             tsl_price = float(int(ltp - tsl))
             try:
-                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.Limit,value[3], tsl_price,tsl_price )
+                alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.StopLossLimit,value[3], tsl_price,tsl_price )
                 #Update dictionary with the new SL price
                 dict_sl_orders.update({oms_order_id:[value[0], value[1], value[2], value[3],tsl_price]} )
                 iLog(f"In check_orders(): TSL for OrderID {oms_order_id} modified to {tsl_price}.\n dict_sl_orders={dict_sl_orders}")
