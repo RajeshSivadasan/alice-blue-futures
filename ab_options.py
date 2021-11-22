@@ -31,7 +31,10 @@
 #v7.3.0 Major changes done: ST Medium removed from strategy, purely based on ST low (3min). Signal was comming too late.
 #v7.3.1 Bugs, ST_Med related fields removed
 #v7.3.2 Implemented nifty_limit_price_offset and bank_limit_price_offset; Removed bo_level parameters as they are not applicable for options 
-#v7.3.3 check_orders(): Bug, Changed limit order to SL limit for TSL updation
+#v7.3.3 check_orders(): Bug->Changed limit order to SL limit for TSL updation. TSL based on banknifty/nifty
+#v7.3.4 place_sl_order(): Order didn't go through as the price moved quickly, but it came back. 
+# But the order got rejected due to less funds. Handled reject orders and increased sl_wait_timeout in .ini to 100 i.e 200 seconds
+#   
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -361,7 +364,7 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
     iLog(f"In place_sl_order():main_order_id={main_order_id}, nifty_bank={nifty_bank}")
 
     lt_price = 0.0
-    wait_time = sl_wait_time      # Currently set to 60 * 2 (sleep) = 120 seconds(2 mins). Can be parameterised 
+    wait_time = sl_wait_time      # Currently set to 100 * 2 (sleep) = 200 seconds(~3 mins).  
     order_executed = False
     strMsg = ""
     
@@ -377,7 +380,10 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
                         lt_price = ord["price"]
                         order_executed = True
                         break   #break for loop
-        
+                    elif ord["order_status"]=="rejected":
+                        iLog(f"Order {main_order_id} rejected. Please check funds or any other issue.",sendTeleMsg=True)
+                        return   #Exit out of the procedure
+
         except Exception as ex:
             print("In place_sl_order(): Exception = ",ex,flush=True)
         
@@ -1131,11 +1137,17 @@ def check_orders():
     # print("dict_ltp=",dict_ltp,flush=True)
 
     #2. Check the current price of the SL orders and if they are above tgt modify them to target price
-    # dict_sl_orders => key=order ID : value = [0-token, 1-target price,2-instrument, 3-quantity, 4-SL Price]
+    # dict_sl_orders => key=order ID : value = [0-token, 1-target price, 2-instrument, 3-quantity, 4-SL Price]
     tsl = bank_tsl  #+ bank_sl
     # iLog(f"tsl={tsl}")
     for oms_order_id, value in dict_sl_orders.items():
+        
         ltp = dict_ltp[value[0]]
+        if value[2][2][:5]=="BANKN":    #Check if the instrument is nifty or banknifty and get the tsl accordingly
+            tsl = bank_tsl
+        else:
+            tsl = nifty_tsl
+        
         iLog(f"oms_order_id={oms_order_id}, ltp={ltp}, Target={float(value[1])}, bank_tsl={bank_tsl}, SL Price={float(value[4])}")
         #Set Target Price : current ltp > target price
         if ltp > value[1] :
@@ -1147,7 +1159,6 @@ def check_orders():
                 iLog("In check_orders(): Exception occured during Target price modification = " + str(ex),3)
 
         #Set StopLoss(TargetPrice) to Trailing SL
-        # Need nifty / banknifty identificaiton        
         elif (ltp - value[4]) > tsl :
             tsl_price = float(int(ltp - tsl))
             try:
