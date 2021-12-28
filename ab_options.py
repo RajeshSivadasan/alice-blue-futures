@@ -34,7 +34,8 @@
 #v7.3.3 check_orders(): Bug->Changed limit order to SL limit for TSL updation. TSL based on banknifty/nifty
 #v7.3.4 place_sl_order(): Order didn't go through as the price moved quickly, but it came back. 
 # But the order got rejected due to less funds. Handled reject orders and increased sl_wait_timeout in .ini to 100 i.e 200 seconds
-#   
+#v7.3.5 BUG:trade_bank parameter was not getting updated at eod due to incorrect passing of section/parameter
+# Reversed the logic of buy and sell. i.e when buy signal is recevied sell is done and vice a versa
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -1148,7 +1149,7 @@ def check_orders():
         else:
             tsl = nifty_tsl
         
-        iLog(f"oms_order_id={oms_order_id}, ltp={ltp}, Target={float(value[1])}, bank_tsl={bank_tsl}, SL Price={float(value[4])}")
+        iLog(f"In check_orders(): oms_order_id={oms_order_id}, ltp={ltp}, Target={float(value[1])}, bank_tsl={bank_tsl}, SL Price={float(value[4])}")
         #Set Target Price : current ltp > target price
         if ltp > value[1] :
             try:
@@ -1165,8 +1166,8 @@ def check_orders():
                 alice.modify_order(TransactionType.Sell,value[2],ProductType.Intraday,oms_order_id,OrderType.StopLossLimit,value[3], tsl_price,tsl_price )
                 #Update dictionary with the new SL price
                 dict_sl_orders.update({oms_order_id:[value[0], value[1], value[2], value[3],tsl_price]} )
-                iLog(f"In check_orders(): TSL for OrderID {oms_order_id} modified to {tsl_price}.\n dict_sl_orders={dict_sl_orders}")
-            
+                iLog(f"In check_orders(): TSL for OrderID {oms_order_id} modified to {tsl_price}")
+                # \n dict_sl_orders={dict_sl_orders}
             except Exception as ex:
                 iLog("In check_orders(): Exception occured during TSL modification = " + str(ex),3)
 
@@ -1380,12 +1381,12 @@ while True:
                 # -- ST LOW
                 #--BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY
                 if super_trend_bank[-1]=='up' and super_trend_bank[-2]=='down' and super_trend_bank[-3]=='down' and super_trend_bank[-4]=='down' and super_trend_bank[-5]=='down' and super_trend_bank[-6]=='down':
-                    buy_bank_options("BANK_CE")
+                    buy_bank_options("BANK_PE") # Reveresed the logic
   
                 # -- ST LOW        
                 #---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL        
                 elif super_trend_bank[-1]=='down' and super_trend_bank[-2]=='up' and super_trend_bank[-3]=='up' and super_trend_bank[-4]=='up' and super_trend_bank[-5]=='up' and super_trend_bank[-6]=='up':
-                    buy_bank_options("BANK_PE")
+                    buy_bank_options("BANK_CE") # Reveresed the logic
       
       
             # Nifty - Only 5 ST values checked in condition as compared to bank
@@ -1494,7 +1495,7 @@ while True:
             # Reset trading flag for bank if bank is enabled on the instance
             if enable_bank : 
                 iLog("Enabling BankNifty trading...")
-                set_config_value("realtime","trade_bn","1")
+                set_config_value("realtime","trade_bank","1")
             
             # Reset trading flag for nifty if nifty is enabled on the instance
             if enable_NFO : 
