@@ -36,6 +36,9 @@
 # But the order got rejected due to less funds. Handled reject orders and increased sl_wait_timeout in .ini to 100 i.e 200 seconds
 #v7.3.5 BUG:trade_bank parameter was not getting updated at eod due to incorrect passing of section/parameter
 # Reversed the logic of buy and sell. i.e when buy signal is recevied sell is done and vice a versa
+#v7.3.6 Added symbol in the logging, moved trade_nfo condition after logging
+# Although positive trades were getting executed but it was not rewarding. need analysis. Missing out on trending trades.
+#Need to check on short duration candles i.e 1 min
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -206,7 +209,7 @@ premarket_flag = int(cfg.get("info", "premarket_flag"))          # whether prema
 nifty_last_close = float(cfg.get("info", "nifty_last_close"))
 # file_bank = cfg.get("info", "file_bank")
 
-# Below 2 Are Base Flag For nifty /bank nifty trading_which is used to reset daily(realtime) flags(trade_nfo,trade_bn) as 
+# Below 2 Are Base Flag For nifty /bank nifty trading_which is used to reset daily(realtime) flags(trade_nfo,trade_bank) as 
 # they might have been changed during the day in realtime 
 enable_bank = int(cfg.get("info", "enable_bank"))                         # 1=Original flag for BANKNIFTY trading. Daily(realtime) flag to be reset eod based on this.  
 enable_NFO = int(cfg.get("info", "enable_NFO"))                         # 1=Original flag for Nifty trading. Daily(realtime) flag to be reset eod based on this.
@@ -305,7 +308,6 @@ def get_realtime_config():
     export_data = float(cfg.get("realtime", "export_data"))
     mtm_sl = float(cfg.get("realtime", "mtm_sl"))
     mtm_target  = float(cfg.get("realtime", "mtm_target"))
-    #print(enableBO2,enableBO3,trade_nfo,trade_bn,flush=True)
     sl_buffer = int(cfg.get("realtime", "sl_buffer"))
     nifty_ord_type = cfg.get("realtime", "nifty_ord_type")      # BO / MIS
     bank_ord_type = cfg.get("realtime", "bank_ord_type")        # MIS / BO
@@ -540,16 +542,6 @@ def buy_nifty_options(strMsg):
 
     df_nifty.iat[-1,5] = "B"  # v1.1 set signal column value
 
-    if not trade_nfo:
-        strMsg = strMsg + " buy_nifty(): trade_nfo=0. Order not initiated."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
-    if not check_trade_time_zone("NIFTY"):
-        strMsg = strMsg + " buy_nifty(): No trade time zone. Order not initiated."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
 
     # strMsg == NIFTY_CE | NIFTY_PE 
     lt_price, nifty_sl = get_trade_price_options(strMsg)   # Get trade price and SL for BO1 
@@ -564,7 +556,7 @@ def buy_nifty_options(strMsg):
     elif strMsg == "NIFTY_PE" :
         ins_nifty_opt = ins_nifty_pe
 
-    strMsg = strMsg + " Limit Price=" + str(lt_price) + " SL=" + str(nifty_sl)
+    strMsg = strMsg + f" {ins_nifty_opt[2]}" + " Limit Price=" + str(lt_price) + " SL=" + str(nifty_sl)
 
     
     if lt_price<nifty_limit_price_low or lt_price>nifty_limit_price_high :
@@ -572,7 +564,17 @@ def buy_nifty_options(strMsg):
         iLog(strMsg,2,sendTeleMsg=True)
         return
     
+    if not trade_nfo:
+        strMsg = strMsg + " buy_nifty(): trade_nfo=0. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
 
+    if not check_trade_time_zone("NIFTY"):
+        strMsg = strMsg + " buy_nifty(): No trade time zone. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
+        
+    
     # Find CE or PE Position
     if pos_nifty > 0:   # Position updates in MTM check
         strMsg = f"buy_nifty(): Position already exists={pos_nifty}. " + strMsg    #do not buy if position already exists; 
@@ -647,16 +649,6 @@ def buy_bank_options(strMsg):
 
     df_bank.iat[-1,5] = "B"  # v1.1 set signal column value
 
-    if not trade_bank :
-        strMsg = strMsg + " buy_bank(): trade_bank=0. Order not initiated."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
-    if not check_trade_time_zone("NIFTY"):
-        strMsg = strMsg + " buy_bank(): No trade time zone. Order not initiated."
-        iLog(strMsg,2,sendTeleMsg=True)
-        return
-
 
     # strMsg == CE | PE 
     lt_price, bank_sl = get_trade_price_options(strMsg)   # Get trade price and SL for BO1 
@@ -672,7 +664,7 @@ def buy_bank_options(strMsg):
         ins_bank_opt = ins_bank_pe
     
 
-    strMsg = strMsg + " Limit Price=" + str(lt_price) + " SL=" + str(bank_sl)
+    strMsg = strMsg + f" {ins_bank_opt[2]}" + " Limit Price=" + str(lt_price) + " SL=" + str(bank_sl)
 
     
     if lt_price<bank_limit_price_low or lt_price>bank_limit_price_high :
@@ -680,7 +672,16 @@ def buy_bank_options(strMsg):
         iLog(strMsg,2,sendTeleMsg=True)
         return
 
+    if not trade_bank :
+        strMsg = strMsg + " buy_bank(): trade_bank=0. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
 
+    if not check_trade_time_zone("NIFTY"):
+        strMsg = strMsg + " buy_bank(): No trade time zone. Order not initiated."
+        iLog(strMsg,2,sendTeleMsg=True)
+        return
+    
     # Find CE or PE Position
     if pos_bank > 0:   # Position updates in MTM check
         strMsg = f"buy_bank(): Position already exists={pos_bank}. " + strMsg    #do not buy if position already exists; 
@@ -892,7 +893,7 @@ def check_MTM_Limit():
                 cfg.write(configfile)
                 configfile.close()
             
-            strMsg = "check_MTM_Limit(): Trade flags set to false. MTM={}, trade_nfo={}, trade_bn={}".format(mtm,trade_nfo,trade_bank)
+            strMsg = "check_MTM_Limit(): Trade flags set to false. MTM={}, trade_nfo={}, trade_bank={}".format(mtm,trade_nfo,trade_bank)
             iLog(strMsg,6)  # 6 = Activity/Task done
             
         except Exception as ex:
