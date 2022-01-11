@@ -39,6 +39,7 @@
 #v7.3.6 Added symbol in the logging, moved trade_nfo condition after logging
 # Although positive trades were getting executed but it was not rewarding. need analysis. Missing out on trending trades.
 #Need to check on short duration candles i.e 1 min
+#v7.3.7 Reinstated back the reversed buy/sell logic 
 
 ###### STRATEGY / TRADE PLAN #####
 # Trading Style : Intraday
@@ -1382,12 +1383,12 @@ while True:
                 # -- ST LOW
                 #--BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY---BUY
                 if super_trend_bank[-1]=='up' and super_trend_bank[-2]=='down' and super_trend_bank[-3]=='down' and super_trend_bank[-4]=='down' and super_trend_bank[-5]=='down' and super_trend_bank[-6]=='down':
-                    buy_bank_options("BANK_PE") # Reveresed the logic
+                    buy_bank_options("BANK_CE") 
   
                 # -- ST LOW        
                 #---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL---SELL        
                 elif super_trend_bank[-1]=='down' and super_trend_bank[-2]=='up' and super_trend_bank[-3]=='up' and super_trend_bank[-4]=='up' and super_trend_bank[-5]=='up' and super_trend_bank[-6]=='up':
-                    buy_bank_options("BANK_CE") # Reveresed the logic
+                    buy_bank_options("BANK_PE") 
       
       
             # Nifty - Only 5 ST values checked in condition as compared to bank
