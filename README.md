@@ -22,6 +22,8 @@ I typically set both of the programs on seperate AWS instances and configure two
 You can read through the comments in the ab.py/ab_options.py for detailed understanding. 
 # There is an ab.ini/ab_options.ini file which is the key configuration file through which you can control all the parameters of this program, even at realtime using Telegram chats. 
 
+As a onetime setup, please create log and data folder in the same path where the program files are copied.
+
 Although this is still work in progress, kindly suggest your feedback. It will help me improve.
 
 Feel free to use/distribute this code freely so that new algo developers can get started easily.  
