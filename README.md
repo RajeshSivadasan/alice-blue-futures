@@ -21,7 +21,6 @@ You can setup AWS instance to start at 8:45 AM and stop at 11:45 PM (After MCX C
 I typically set both of the programs on seperate AWS instances and configure two seperate IDs. 
 You can read through the comments in the ab.py/ab_options.py for detailed understanding. 
 # There is an ab.ini/ab_options.ini file which is the key configuration file through which you can control all the parameters of this program, even at realtime using Telegram chats. 
-Will update proper documentation soon...
 
 Although this is still work in progress, kindly suggest your feedback. It will help me improve.
 
