@@ -9,11 +9,13 @@
 # v1.6 removed import telegram
 # v1.7 Added back telegram, needed for sending file :). Used subprocess module for running linux command 
 # v1.8 added support for get/set of token section as well  
+# v1.9 Parameterisation of INI file, logfilename prefix updated (can be parameterised)
+# v2.0 Removed hardcoding of the chat id in the parse command and used chat id parameter from the .ini file
 
 # Info
 # Once Telegram menubuilder is used, webhook gets created and it does not go away with the deletion of menubuilder bot
 # you need to call deleteWebhook method like below to get the getUpdates method working
-# https://api.telegram.org/<bottoken>/deleteWebhook
+# https://api.telegram.org/bot596058150:AAG936V9rpqmOOcAH_OxaHik_8ZGJZM4m_A/deleteWebhook
 # currently all messages will only go to the chat id configured in ab.ini tokens section. Any other user(s) will not receive any messages although they can send messages
 # This was not enabled mainly to restrict others from setting the ab.ini values which can tamper with the system.
 # Readonly mode can be planned for other users. 
@@ -34,8 +36,9 @@ sys.stdout = sys.stderr = open(r"./log/ab_bg_" + datetime.datetime.now().strftim
 ######################################
 
 # Load parameters from the config file
+INI_FILE = "ab_options.ini"              # Set .ini file name used for storing config info.
 cfg = configparser.ConfigParser()
-cfg.read("ab.ini")
+cfg.read(INI_FILE)
 
 # Exit if the background process is disabled 
 if int(cfg.get("tokens", "enable_bg_process")) == 0:
@@ -43,7 +46,7 @@ if int(cfg.get("tokens", "enable_bg_process")) == 0:
     iLog(strMsg,sendTeleMsg=True)
     sys.exit()
 
-# Set user profile; Access token and other user specific info from ab.ini will be pulled from this section
+# Set user profile; Access token and other user specific info from .ini will be pulled from this section
 ab_lib.strChatID = cfg.get("tokens", "chat_id")
 ab_lib.strBotToken = cfg.get("tokens", "bot_token")    #Bot include bot prefix in the token
 strMsg = "Initialising " + __file__ + " for " + cfg.get("tokens", "uid")
@@ -55,7 +58,7 @@ iLog(strMsg,sendTeleMsg=True)
 
 def save_configfile():
     try:
-        with open('ab.ini', 'w') as configfile:
+        with open(INI_FILE, 'w') as configfile:
             cfg.write(configfile)
             configfile.close()
     except Exception as ex:
@@ -70,9 +73,8 @@ def sendTeleFile(attachFile):
     except Exception as ex:
         print("ex=",ex,flush=True)
 
-
 def parseCommand(text,chat_id):
-    '''Parses the text for commands and updates the ab.ini file for actions.
+    '''Parses the text for commands and updates the INI_FILE file for actions.
     Does not directly do any actions on the trading account or linux instance.
      '''
     # More validations can be done based on the enable_nfo and enable_mcx params
@@ -81,7 +83,7 @@ def parseCommand(text,chat_id):
     flg_start = 0
     flg_stop = 0
     flg_nfo = 0
-    flg_mxc = 0
+    flg_bank = 0
     flg_update_config = 0
     strMsg = ""
 
@@ -90,7 +92,7 @@ def parseCommand(text,chat_id):
     strTrade = ['TRADE','TRADING']
     strExportData = ['EXPORT','SAVE']
     strNFO = ['NFO','NIFTY']
-    strMCX = ['MCX','CRUDE']
+    strBank = ['BANK','BN']
     strHelp = ['HELP']
     strGetParam = ['GET PARAM']
     strSetParam = ['SET PARAM']
@@ -131,8 +133,8 @@ def parseCommand(text,chat_id):
 
     # Set config file parameter values
     if any(x in text.upper() for x in strSetParam):
-        # Set commands can be only executed by Rajesh as of now
-        if chat_id == '670221062':     # RajeshSivadasan
+        # Set commands can be only executed by the chat id mentioned in the parameter 
+        if chat_id == ab_lib.strChatID :
             if len(text.split(' ')) > 2 :
                 if text.upper().split(' ')[2] == 'SEC':
                     sec = text.lower().split(' ')[3]
@@ -172,7 +174,7 @@ def parseCommand(text,chat_id):
                 # Send the last n lines, set to default 10
                 if no_of_lines == "" : no_of_lines = 10
                 strMsg = ""
-                fname = "./log/ab_" + datetime.datetime.now().strftime("%Y%m%d") +".log"
+                fname = "./log/ab_bg_" + datetime.datetime.now().strftime("%Y%m%d") +".log"
                 iLog("Sending last " + no_of_lines + " lines from file " + fname,sendTeleMsg=True)
                 with open(fname) as file: 
                     for line in (file.readlines() [ -1*int(no_of_lines) :]): 
@@ -182,7 +184,7 @@ def parseCommand(text,chat_id):
  
         elif text.strip().upper()=="GET LOG":
             # Send the log file
-            fname = "./log/ab_" + datetime.datetime.now().strftime("%Y%m%d") +".log"
+            fname = "./log/ab_bg_" + datetime.datetime.now().strftime("%Y%m%d") +".log"
             sendTeleFile(fname)
 
         return
@@ -212,24 +214,24 @@ def parseCommand(text,chat_id):
     
     if any(x in text.upper() for x in strNFO):
         flg_nfo = 1
-    elif any(x in text.upper() for x in strMCX ):
-        flg_mxc = 1        
+    elif any(x in text.upper() for x in strBank ):
+        flg_bank = 1        
     
 
     if flg_nfo:
         if flg_stop:
-            cfg.set("realtime","tradenfo","0")
+            cfg.set("realtime","trade_nfo","0")
             flg_update_config = 1
         elif flg_start:
-            cfg.set("realtime","tradenfo","1")
+            cfg.set("realtime","trade_nfo","1")
             flg_update_config = 1
 
-    if flg_mxc:
+    if flg_bank:
         if flg_stop:
-            cfg.set("realtime","trademcx","0")
+            cfg.set("realtime","trade_bank","0")
             flg_update_config = 1
         elif flg_start:
-            cfg.set("realtime","trademcx","1")
+            cfg.set("realtime","trade_bank","1")
             flg_update_config = 1
 
 
@@ -269,7 +271,7 @@ baseURL = "https://api.telegram.org/" + ab_lib.strBotToken +  "/getUpdates?timeo
 url =  baseURL
 offset = None
 text = ""
-# iLog("url = " + url)
+iLog("url = " + url)
 
 # Loop through the telegram message to commands
 while True:
@@ -280,7 +282,7 @@ while True:
         resp = requests.get(url)
         updates = resp.json()
         
-        # iLog("updates=" + str(updates)) 
+        iLog("updates=" + str(updates)) 
         chat_id = ""
 
         if len(updates["result"]) > 0:
@@ -299,6 +301,6 @@ while True:
             text=""
     
     except Exception as e:
-        print("exception=",e,flush=True)
+        print("exception="+str(e)+";"+str(updates),flush=True)
 
     time.sleep(10)
