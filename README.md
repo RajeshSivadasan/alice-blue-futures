@@ -6,11 +6,11 @@ Initially, I had developed this for windows then later moved to linux (ubuntu) p
 
 There are 2 programs. You can run either one of them on a single linux (It should run on windows as well, I have not yet tested though) machine.  
 1. For Options trading (Requires 10-15k capital) - ab_options.py which uses ab_options.ini as configuration/parameter file.
-   Usage : > python ab_options.py 
+   <br>Usage : > python ab_options.py 
    This program is for option buying only.
    
 2. For Futures trading (Requires 2.5-4 lakhs capital) - ab.py which uses ab.ini as configuration/parameter file.
-   Usage : > python ab_options.py
+   <br>Usage : > python ab_options.py
    This program is focused on Nifty and Crude futures with a simple Supertrend with RSI strategy.
    
 These programs basically uses 3min (low) , 6min (medium) time frame supertrend and RSI indicators (adjusted through parameters) to generate signals. For any other strategy you need to modify the main program. My wish list includes parameterisation of this strategy peice as well. 
