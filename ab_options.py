@@ -131,7 +131,7 @@ from pya3 import *
 if not os.path.exists("./log") : os.makedirs("./log")
 
 # Enable logging to file 
-sys.stdout = sys.stderr = open(r"./log/ab_options_" + datetime.now().strftime("%Y%m%d") +".log" , "a")
+# sys.stdout = sys.stderr = open(r"./log/ab_options_" + datetime.now().strftime("%Y%m%d") +".log" , "a")
 
 
 
@@ -903,13 +903,14 @@ def check_MTM_Limit():
             print(pos)
 
             df_pos = pd.DataFrame(pos)
-            print("df_pos:")
-            print(df_pos)
+            # print("df_pos:")
+            # print(df_pos)
 
             mtm = sum(pd.to_numeric(df_pos.MtoM.str.replace(",","")))
             pos_nifty = sum(pd.to_numeric(df_pos[df_pos.Symbol=='NIFTY'].Netqty))
             pos_bank = sum(pd.to_numeric(df_pos[df_pos.Symbol=='BANKNIFTY'].Netqty))
 
+            print("mtm,pos_nifty,pos_bank: ",mtm,pos_nifty,pos_bank,flush=True)
             # if pos["emsg"]!='No Data':
             #     for p in  pos['data']['positions']:
             #         mtm = float(p['m2m'].replace(",","")) + mtm
@@ -1166,21 +1167,36 @@ def check_orders():
 
     #1 Remove completed orders/keep only pending orders from the SL orders dict
     try:
-        orders = alice.get_order_history()['data']['pending_orders']
-        if orders:
-            # iLog(f"check_orders():orders={orders}\n dict_sl_orders={dict_sl_orders}")   #To be commented later
-            # loop through Sl orders dict and check if its in the pending order list 
+        # orders = alice.get_order_history('')['data']['pending_orders']
+        df_orders = pd.DataFrame(alice.get_order_history(''))
+        df_orders = df_orders[df_orders.Status=='pending'] 
+
+        if not df_orders.empty:
             for key, value in dict_sl_orders.items():
                 order_found = False
-                for order in orders:
-                    if key == order['oms_order_id']:
-                        order_found = True
-                        break
+                if key in df_orders.ExchOrdID.values:
+                    order_found = True
+                    break
                 
                 # remove the order from sl dict which is not pending
                 if not order_found:
                     dict_sl_orders.pop(key)
                     iLog(f"In check_orders(): Removed order {key} from dict_sl_orders")
+
+        # if orders:
+        #     # iLog(f"check_orders():orders={orders}\n dict_sl_orders={dict_sl_orders}")   #To be commented later
+        #     # loop through Sl orders dict and check if its in the pending order list 
+        #     for key, value in dict_sl_orders.items():
+        #         order_found = False
+        #         for order in orders:
+        #             if key == order['oms_order_id']:
+        #                 order_found = True
+        #                 break
+                
+        #         # remove the order from sl dict which is not pending
+        #         if not order_found:
+        #             dict_sl_orders.pop(key)
+        #             iLog(f"In check_orders(): Removed order {key} from dict_sl_orders")
         
         else:
             dict_sl_orders.clear()
