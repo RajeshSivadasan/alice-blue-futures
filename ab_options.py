@@ -899,8 +899,8 @@ def check_MTM_Limit():
     try:    # Get netwise postions (MTM)
         pos = alice.get_netwise_positions()
         if type(pos)==list:
-            print("pos:")
-            print(pos)
+            # print("pos:")
+            # print(pos)
 
             df_pos = pd.DataFrame(pos)
             # print("df_pos:")
@@ -1169,7 +1169,11 @@ def check_orders():
     try:
         # orders = alice.get_order_history('')['data']['pending_orders']
         df_orders = pd.DataFrame(alice.get_order_history(''))
-        df_orders = df_orders[df_orders.Status=='pending'] 
+        # print("df_orders1:\n",df_orders)
+        df_orders = df_orders[df_orders.Status=='open'].ExchOrdID 
+        
+        # print("df_orders2:\n",df_orders)
+        # print("dict_sl_orders:\n",dict_sl_orders)
 
         if not df_orders.empty:
             for key, value in dict_sl_orders.items():
