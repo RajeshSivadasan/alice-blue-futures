@@ -7,7 +7,7 @@
 #   Replace Nifty futures with Nifty 50 Index. Use it for option trading
 #   First phase we will implement NIfty then Banknifty
 #v7.0.1 Fixed expiry date holiday issue
-#v7.0.2 Fixed buy_signal():Optional parameter price not of type float
+#v7.0.2 Fixed place_order_BO():Optional parameter price not of type float
 #v7.0.3 Removed RSI range and momentum check, print change 
 #v7.0.4 fixed ins_nifty_opt incorrect token assignment
 #v7.0.5 fixed issue with strMsg assignment in buy_nifty_options()
@@ -70,7 +70,7 @@
 # exception= list index out of range
 
 # Open issues/tasks:
-# Check use of float in buy_signal() as it is working in ab.py without it
+# Check use of float in place_order_BO() as it is working in ab.py without it
 # Instead of check_trade_time_zone() plan for no_trade_zone() 
 # Update Contract Symbol ab.update_contract_symbol(). If last friday is holiday this code dosent run and the symbol is not updated and the program fails
 # Consider seperate sl_buffer for nifty and bank in get_trade_price()
@@ -217,16 +217,9 @@ nifty_strike_pe_offset = float(cfg.get("realtime", "nifty_strike_pe_offset"))
 bank_strike_ce_offset = float(cfg.get("realtime", "bank_strike_ce_offset"))
 bank_strike_pe_offset = float(cfg.get("realtime", "bank_strike_pe_offset"))
 
-# nifty_lot_size = int(cfg.get("info", "nifty_lot_size"))
-# criude_lot_size = int(cfg.get("info", "bank_lot_size"))
-
 #List of thurshdays when its NSE holiday, hence reduce 1 day to get expiry date 
 weekly_expiry_holiday_dates = cfg.get("info", "weekly_expiry_holiday_dates").split(",")
 
-
-# Below will be derived dynamically. Would be the ATM strike
-# nifty_symbol = cfg.get("info", "nifty_symbol")
-# bank_symbol = cfg.get("info", "bank_symbol")
 
 nifty_tgt1 = float(cfg.get("info", "nifty_tgt1"))   #30.0
 nifty_tgt2 = float(cfg.get("info", "nifty_tgt2"))   #60.0 medium target
@@ -457,7 +450,7 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
         
         #place SL order
         #---- Intraday order (MIS) , SL Order
-        order = squareOff_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit, sl_price)
+        order = place_order_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit, sl_price)
         if order['status'] == 'success':
             strMsg = f"In place_sl_order(1): MIS SL1 order_id={order['data']['oms_order_id']}, StopLoss Price={sl_price}"
             #update dict with SL order ID : [0-token, 1-target price, 2-instrument, 3-quantity, 4-SL Price]
@@ -469,7 +462,7 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
         #If second/medium range target (BO2) order is enabled then execute that
         
         if (nifty_bank == "NIFTY" and enableBO2_nifty ) or (nifty_bank == "BANK" and enableBO2_bank) :
-            order = squareOff_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit, sl_price)
+            order = place_order_MIS(TransactionType.Sell, ins_opt, bo1_qty, OrderType.StopLossLimit, sl_price)
             if order['status'] == 'success':
                 strMsg = f"In place_sl_order(2): MIS SL2 order_id={order['data']['oms_order_id']}, StopLoss Price={sl_price}"
                 #update dict with SL order ID : [0-token, 1-target price, 2-instrument, 3-quantity, 4-SL Price]
@@ -488,12 +481,10 @@ def place_sl_order(main_order_id, nifty_bank, ins_opt):
 
     iLog(strMsg,sendTeleMsg=True)
 
-def squareOff_MIS(buy_sell,ins_scrip,qty, order_type = OrderType.Market, limit_price=0.0,order_tag= None):
-    '''Square off MIS positions at EoD or when mtm limit is reached. Also used for placing Market orders. 
+def place_order_MIS(buy_sell,ins_scrip,qty, order_type = OrderType.Market, limit_price=0.0,order_tag=None):
+    '''Places orders to the exchange based on the parameters  
     buy_sell = TransactionType.Buy/TransactionType.Sell
-
     order_type = OrderType.StopLossLimit Default is Market order
-
     limit_price = limit price in case SL order needs to be placed 
     '''
     global alice
@@ -519,15 +510,15 @@ def squareOff_MIS(buy_sell,ins_scrip,qty, order_type = OrderType.Market, limit_p
                          is_amo = False,
                          order_tag = order_tag)
 
-        # strMsg = "In squareOff_MIS(): buy_sell={},ins_scrip={},qty={},order_type={},limit_price={}".format(buy_sell,ins_scrip,qty,order_type,limit_price)
+        # strMsg = "In place_order_MIS(): buy_sell={},ins_scrip={},qty={},order_type={},limit_price={}".format(buy_sell,ins_scrip,qty,order_type,limit_price)
         # iLog(strMsg,6,sendTeleMsg=True)
     
     except Exception as ex:
-        iLog("Exception occured in squareOff_MIS():"+str(ex),3)
+        iLog("Exception occured in place_order_MIS():"+str(ex),3)
 
     return ord_obj
 
-def buy_signal(ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs,product_type=ProductType.BracketOrder):
+def place_order_BO(ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs):
     global alice
     #ord=
     #{'status': 'success', 'message': 'Order placed successfully', 'data': {'oms_order_id': '200416000176487'}}
@@ -539,7 +530,7 @@ def buy_signal(ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_ab
                          instrument = ins_scrip,
                          quantity = qty,
                          order_type = OrderType.Limit,
-                         product_type = product_type,
+                         product_type = ProductType.BracketOrder,
                          price = float(limit_price),
                          trigger_price = float(limit_price),
                          stop_loss = float(stop_loss_abs),
@@ -547,38 +538,20 @@ def buy_signal(ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_ab
                          trailing_sl = trailing_sl_abs,
                          is_amo = False)
     except Exception as ex:
-            # print("Exception occured in buy_signal():",ex,flush=True)
+            # print("Exception occured in place_order_BO():",ex,flush=True)
             #ord_obj={'status': 'error'} not required as api gives this in case of actual error
-    #print("buy_signal():ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs:",ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs,flush=True)
-            iLog("Exception occured in buy_signal():"+str(ex),3)
+    #print("place_order_BO():ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs:",ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs,flush=True)
+            iLog("Exception occured in place_order_BO():"+str(ex),3)
 
-    return ord_obj
-
-def sell_signal(ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs,product_type=ProductType.BracketOrder):
-    global alice
-    try:
-        ord_obj=alice.place_order(transaction_type = TransactionType.Sell,
-                         instrument = ins_scrip,
-                         quantity = qty,
-                         order_type = OrderType.Limit,
-                         product_type = product_type,
-                         price = limit_price,
-                         trigger_price = limit_price,
-                         stop_loss = stop_loss_abs,
-                         square_off = target_abs,
-                         trailing_sl = trailing_sl_abs,
-                         is_amo = False)
-          
-    except Exception as ex:
-            # print("Exception occured in sell_signal():",ex,flush=True)
-            iLog("Exception occured in sell_signal():"+str(ex),3)
-    #print("sell_signal():ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs:",ins_scrip,qty,limit_price,stop_loss_abs,target_abs,trailing_sl_abs,flush=True)
-    
     return ord_obj
 
 def buy_nifty_options(strMsg):
    
     global df_nifty
+
+    if df_nifty.empty:
+        iLog(strMsg+" No candle data found",3)
+        return
 
     df_nifty.iat[-1,5] = "B"  # v1.1 set signal column value
 
@@ -631,7 +604,7 @@ def buy_nifty_options(strMsg):
         
         if nifty_ord_type == "MIS" : 
             #---- Intraday order (MIS) , Market Order
-            # order = squareOff_MIS(TransactionType.Buy, ins_nifty_opt,nifty_bo1_qty)
+            # order = place_order_MIS(TransactionType.Buy, ins_nifty_opt,nifty_bo1_qty)
             # order_tag = datetime.datetime.now().strftime("NF_%H%M%S")
             
             bo1_qty = nifty_bo1_qty
@@ -639,7 +612,7 @@ def buy_nifty_options(strMsg):
                 bo1_qty = nifty_bo1_qty*2
             
             
-            order = squareOff_MIS(TransactionType.Buy, ins_nifty_opt, bo1_qty, OrderType.Limit, lt_price)
+            order = place_order_MIS(TransactionType.Buy, ins_nifty_opt, bo1_qty, OrderType.Limit, lt_price)
             if order['status'] == 'success':
                 strMsg = strMsg + " buy_nifty(): Initiating place_sl_order(). main_order_id==" +  str(order['data']['oms_order_id'])
                 iLog(strMsg,sendTeleMsg=True)   # Can be commented later
@@ -652,7 +625,7 @@ def buy_nifty_options(strMsg):
 
         elif nifty_ord_type == "BO" :
             #---- First Bracket order for initial target
-            order = buy_signal(ins_nifty_opt,nifty_bo1_qty,lt_price,nifty_sl,nifty_tgt1,nifty_tsl)    #SL to be float; 
+            order = place_order_BO(ins_nifty_opt,nifty_bo1_qty,lt_price,nifty_sl,nifty_tgt1,nifty_tsl)    #SL to be float; 
             if order['status'] == 'success' :
                 # buy_order1_nifty = order['data']['oms_order_id']
                 strMsg = strMsg + " 1st BO order_id=" + str(order['data']['oms_order_id'])
@@ -662,7 +635,7 @@ def buy_nifty_options(strMsg):
             #---- Second Bracket order for open target
             if enableBO2_nifty:
                 # lt_price, nifty_sl = get_trade_price("NIFTY","BUY",nifty_ord_exec_level2)   # Get trade price and SL for BO2
-                order = buy_signal(ins_nifty_opt,nifty_bo2_qty,lt_price,nifty_sl,nifty_tgt2,nifty_tsl)
+                order = place_order_BO(ins_nifty_opt,nifty_bo2_qty,lt_price,nifty_sl,nifty_tgt2,nifty_tsl)
                 strMsg = strMsg + " BO2 Limit Price=" + str(lt_price) + " SL=" + str(nifty_sl)
                 if order['status'] == 'success':
                     # buy_order2_nifty = order['data']['oms_order_id']
@@ -673,7 +646,7 @@ def buy_nifty_options(strMsg):
             #---- Third Bracket order for open target
             if enableBO3_nifty:  
                 # lt_price, nifty_sl = get_trade_price("NIFTY","BUY",nifty_ord_exec_level3)   # Get trade price and SL for BO3
-                order = buy_signal(ins_nifty_opt,nifty_bo3_qty,lt_price,nifty_sl,nifty_tgt3,nifty_tsl)
+                order = place_order_BO(ins_nifty_opt,nifty_bo3_qty,lt_price,nifty_sl,nifty_tgt3,nifty_tsl)
                 strMsg = strMsg + " BO3 Limit Price=" + str(lt_price) + " SL=" + str(nifty_sl)
                 if order['status']=='success':
                     # buy_order3_nifty = order['data']['oms_order_id']
@@ -738,14 +711,14 @@ def buy_bank_options(strMsg):
         
         if bank_ord_type == "MIS" : 
             #---- Intraday order (MIS) , Market Order
-            # order = squareOff_MIS(TransactionType.Buy, ins_bank_opt,bank_bo1_qty)
+            # order = place_order_MIS(TransactionType.Buy, ins_bank_opt,bank_bo1_qty)
             # order_tag = datetime.datetime.now().strftime("BN_%H%M%S")
             # IF BO2 is enabled then trade quantity needs to be doubled. Two SL/TGT Orders will be placed with the below quantity 
             bo1_qty = bank_bo1_qty
             if enableBO2_bank: 
                 bo1_qty = bank_bo1_qty*2
             
-            order = squareOff_MIS(TransactionType.Buy, ins_bank_opt, bo1_qty, OrderType.Limit, lt_price)
+            order = place_order_MIS(TransactionType.Buy, ins_bank_opt, bo1_qty, OrderType.Limit, lt_price)
             if order['status'] == 'success':
                 strMsg = strMsg + " buy_bank(): Initiating place_sl_order(). main_order_id=" + str(order['data']['oms_order_id']) 
                 iLog(strMsg,sendTeleMsg=True)   # Can be commented later
@@ -759,7 +732,7 @@ def buy_bank_options(strMsg):
         # BO option may not work as usually BO is disabled in alice blue for options, hence not updating the below code for BO
         elif bank_ord_type == "BO" :
             #---- First Bracket order for initial target
-            order = buy_signal(ins_bank_opt,bank_bo1_qty,lt_price,bank_sl,bank_tgt1,bank_tsl)    #SL to be float; 
+            order = place_order_BO(ins_bank_opt,bank_bo1_qty,lt_price,bank_sl,bank_tgt1,bank_tsl)    #SL to be float; 
             if order['status'] == 'success' :
                 # buy_order1_bank = order['data']['oms_order_id']
                 strMsg = strMsg + " 1st BO order_id=" + str(order['data']['oms_order_id'])
@@ -769,7 +742,7 @@ def buy_bank_options(strMsg):
             #---- Second Bracket order for open target
             if enableBO2_bank:
                 # lt_price, bank_sl = get_trade_price("NIFTY","BUY",bank_ord_exec_level2)   # Get trade price and SL for BO2
-                order = buy_signal(ins_bank_opt,bank_bo2_qty,lt_price,bank_sl,bank_tgt2,bank_tsl)
+                order = place_order_BO(ins_bank_opt,bank_bo2_qty,lt_price,bank_sl,bank_tgt2,bank_tsl)
                 strMsg = strMsg + " BO2 Limit Price=" + str(lt_price) + " SL=" + str(bank_sl)
                 if order['status'] == 'success':
                     # buy_order2_bank = order['data']['oms_order_id']
@@ -780,7 +753,7 @@ def buy_bank_options(strMsg):
             #---- Third Bracket order for open target
             if enableBO3_bank:  
                 # lt_price, bank_sl = get_trade_price("NIFTY","BUY",bank_ord_exec_level3)   # Get trade price and SL for BO3
-                order = buy_signal(ins_bank_opt,bank_bo3_qty,lt_price,bank_sl,bank_tgt3,bank_tsl)
+                order = place_order_BO(ins_bank_opt,bank_bo3_qty,lt_price,bank_sl,bank_tgt3,bank_tsl)
                 strMsg = strMsg + " BO3 Limit Price=" + str(lt_price) + " SL=" + str(bank_sl)
                 if order['status']=='success':
                     # buy_order3_bank = order['data']['oms_order_id']
@@ -821,16 +794,16 @@ def close_all_orders(opt_index="ALL",buy_sell="ALL",ord_open_time=0):
     if (opt_index=='NIFTY' or opt_index=='ALL') and nifty_ord_type == "MIS":
         if pos_nifty > 0 :
             iLog(f"Closing Nifty Open Positions pos_nifty={pos_nifty} - Execution Commented",2,sendTeleMsg=True)   
-            # squareOff_MIS(TransactionType.Sell, ins_nifty_opt,pos_nifty)
+            # place_order_MIS(TransactionType.Sell, ins_nifty_opt,pos_nifty)
             # needs to be managed with SL orders and cap on number of trades and MTM limit
         elif pos_nifty < 0 :
             iLog(f"Option position cannot be negative pos_nifty={pos_nifty}",2,sendTeleMsg=True)
-            # squareOff_MIS(TransactionType.Buy, ins_nifty_opt, abs(pos_nifty))
+            # place_order_MIS(TransactionType.Buy, ins_nifty_opt, abs(pos_nifty))
 
     if (opt_index=='BANK'  or opt_index=='ALL') and nifty_ord_type == "MIS":
         if pos_bank > 0 :
             iLog(f"Closing BankNifty Open Positions pos_bank={pos_bank} - Execution Commented",2,sendTeleMsg=True)   
-            # squareOff_MIS(TransactionType.Sell, ins_bank_opt ,pos_bank)
+            # place_order_MIS(TransactionType.Sell, ins_bank_opt ,pos_bank)
             # needs to be managed with SL orders and cap on number of trades and MTM limit
         elif pos_bank < 0 :
             iLog(f"Option position cannot be negative pos_bank={pos_bank}",2,sendTeleMsg=True)
@@ -838,7 +811,7 @@ def close_all_orders(opt_index="ALL",buy_sell="ALL",ord_open_time=0):
 
     # Get pending orders and cancel them
     try:
-        orders = alice.get_order_history()['data']['pending_orders'] #Get all orders
+        orders = alice.get_order_history('')['data']['pending_orders'] #Get all orders
         if not orders:
             # print(datetime.datetime.now(),"In close_all_orders(). No Pending Orders found.",opt_index,flush=True)
             iLog("close_all_orders(): No Pending Orders found for "+ str(opt_index))
@@ -910,7 +883,7 @@ def check_MTM_Limit():
             pos_nifty = sum(pd.to_numeric(df_pos[df_pos.Symbol=='NIFTY'].Netqty))
             pos_bank = sum(pd.to_numeric(df_pos[df_pos.Symbol=='BANKNIFTY'].Netqty))
 
-            print("mtm,pos_nifty,pos_bank: ",mtm,pos_nifty,pos_bank,flush=True)
+            # print("mtm,pos_nifty,pos_bank: ",mtm,pos_nifty,pos_bank,flush=True)
             # if pos["emsg"]!='No Data':
             #     for p in  pos['data']['positions']:
             #         mtm = float(p['m2m'].replace(",","")) + mtm
@@ -1104,8 +1077,7 @@ def get_option_tokens(nifty_bank="ALL"):
             ins_nifty_pe = alice.get_instrument_for_fno(exch="NFO",symbol = 'NIFTY', expiry_date=expiry_date.isoformat(), is_fut=False, strike=strike_pe, is_CE = False)
 
 
-            s_list = [ins_nifty_ce,ins_nifty_pe]
-            alice.subscribe(s_list)
+            alice.subscribe([ins_nifty_ce,ins_nifty_pe])
             
             print("ins_nifty_ce=",ins_nifty_ce,flush=True)
             print("ins_nifty_pe=",ins_nifty_pe,flush=True)
@@ -1130,11 +1102,12 @@ def get_option_tokens(nifty_bank="ALL"):
             strike_ce = float(bank_atm - bank_strike_ce_offset) #ITM Options
             strike_pe = float(bank_atm + bank_strike_pe_offset)
 
+            print(strike_ce,expiry_date.isoformat())
+
             ins_bank_ce = alice.get_instrument_for_fno(exch="NFO",symbol = 'BANKNIFTY', expiry_date=expiry_date.isoformat(), is_fut=False, strike=strike_ce, is_CE = True)
             ins_bank_pe = alice.get_instrument_for_fno(exch="NFO",symbol = 'BANKNIFTY', expiry_date=expiry_date.isoformat(), is_fut=False, strike=strike_pe, is_CE = False)
 
-            s_list = [ins_bank_ce,ins_bank_pe]
-            alice.subscribe(s_list)
+            alice.subscribe([ins_bank_ce,ins_bank_pe])
             
             print("ins_bank_ce=",ins_bank_ce,flush=True)
             print("ins_bank_pe=",ins_bank_pe,flush=True)
@@ -1461,8 +1434,6 @@ def open_callback():
     iLog("In open_callback().")
     # Call the instrument subscription, Hope this will resolve the tick discontinuation issue
     subscribe_ins()   # 2020-08-13 moving this to main call
-    # 2020-08-14 Didnt worked So upgraded the alice_blue package. Lets observe on monday 
-    #
 
 def error_callback(error):
     iLog("In error_callback(). {}".format(error),3)
@@ -1499,11 +1470,6 @@ ins_bank = alice.get_instrument_by_symbol('INDICES', 'NIFTY BANK')
 
 # print("ins_nifty:")
 # print(ins_nifty)
-
-# # Get access token
-# access_token = getAccessToken(INI_FILE=INI_FILE)
-# # print("access_token",access_token)
-# if access_token=="-1": exit()
  
 # Connect to AliceBlue and download contracts
 # alice = AliceBlue(username=susername, password=spassword, access_token=access_token, master_contracts_to_download=['NFO','NSE'])
@@ -1568,7 +1534,6 @@ get_option_tokens("ALL")
 strMsg = "Starting tick processing."
 iLog(strMsg,sendTeleMsg=True)
 
-check_MTM_Limit()
 
 
 # Process tick data/indicators and generate buy/sell and execute orders
@@ -1750,7 +1715,7 @@ while True:
             #-- Find processing time and Log only if processing takes more than 2 seconds
             # t2 = time() - t1
             t2 = (datetime.today() - t1).total_seconds()
-            print("t2:",t2)
+            # print("t2:",t2)
             if t2 > 2.0: 
                 strMsg="Processing time(secs)= {0:.2f}".format(t2)
                 iLog(strMsg,2)
